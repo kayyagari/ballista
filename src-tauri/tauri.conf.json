@@ -27,7 +27,8 @@
       "identifier": "com.sereen.io",
       "icon": [
         "icons/32x32.icns",
-        "icons/favicon.ico"
+        "icons/favicon.ico",
+        "icons/icon.png"
       ]
     },
     "security": {
