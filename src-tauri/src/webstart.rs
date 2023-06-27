@@ -2,11 +2,13 @@ use std::fs::File;
 use std::os;
 use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::Arc;
 use anyhow::Error;
 use reqwest::blocking::{ClientBuilder, Client};
 use reqwest::Url;
 use roxmltree::{Document, Node};
 use sha2::{Sha256, Digest};
+use crate::con::ConnectionEntry;
 
 #[derive(Debug)]
 pub struct WebstartFile {
@@ -58,7 +60,7 @@ impl WebstartFile {
         Ok(ws)
     }
 
-    pub fn run(&self, java_home: &str, username: &str, password: &str) -> Result<(), Error> {
+    pub fn run(&self, ce: Arc<ConnectionEntry>) -> Result<(), Error> {
         let itr = self.tmp_dir.read_dir()?;
         let mut classpath = String::with_capacity(1024);
         let mut rhino_classpath = String::with_capacity(100);
@@ -82,7 +84,7 @@ impl WebstartFile {
         classpath.push_str(&rhino_classpath);
         //println!("class path: {}", classpath);
         let mut cmd;
-        let java_home = java_home.trim();
+        let java_home = ce.java_home.trim();
         if java_home.is_empty() {
             cmd = Command::new("java")
         }
@@ -92,16 +94,19 @@ impl WebstartFile {
 
         println!("using java from: {:?}", cmd.get_program().to_str());
 
-        cmd.arg("-Xms1g")
-        .arg("-cp")
+        let heap = ce.heap_size.trim();
+        if !heap.is_empty() {
+            cmd.arg(heap);
+        }
+
+        cmd.arg("-cp")
         .arg(classpath)
         .arg(&self.main_class)
         .args(&self.args);
 
-        let username = username.trim();
-        if !username.is_empty() {
+        if let Some(ref username) = ce.username {
             cmd.arg(username);
-            if !password.is_empty() {
+            if let Some(ref password) = ce.password {
                 cmd.arg(password);
             }
         }
@@ -177,7 +182,5 @@ mod tests {
     pub fn test_load() {
         let ws = WebstartFile::load("https://localhost:8443").unwrap();
         println!("{:?}", ws);
-
-        ws.run("", "admin", "admin").unwrap();
     }
 }

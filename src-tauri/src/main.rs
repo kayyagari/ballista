@@ -1,7 +1,7 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use std::process::Command;
+use std::process::{Command, exit};
 use anyhow::Error;
 use home::env::Env;
 use tauri::State;
@@ -13,15 +13,18 @@ mod webstart;
 mod con;
 
 #[tauri::command(rename_all = "snake_case")]
-fn launch(url: &str, java_home: &str, username: &str, password: &str) -> String {
-    let ws = WebstartFile::load(url);
-    if let Err(e) = ws {
-        return e.to_string();
-    }
+fn launch(id: &str, cs: State<ConnectionStore>) -> String {
+    let ce = cs.get(id);
+    if let Some(ce) = ce {
+        let ws = WebstartFile::load(&ce.address);
+        if let Err(e) = ws {
+            return e.to_string();
+        }
 
-    let r = ws.unwrap().run(java_home, username, password);
-    if let Err(e) = r {
-        return  e.to_string();
+        let r = ws.unwrap().run(ce);
+        if let Err(e) = r {
+            return  e.to_string();
+        }
     }
 
     String::from("success")
@@ -35,12 +38,13 @@ fn load_connections(cs: State<ConnectionStore>) -> String {
 #[tauri::command]
 fn save(ce: &str, cs: State<ConnectionStore>) -> String {
     let ce : serde_json::Result<ConnectionEntry> = serde_json::from_str(ce);
-    println!("received connection data {:?}", ce);
+    //println!("received connection data {:?}", ce);
     let r = cs.save(ce.expect("failed to deserialize the given ConnectionEntry"));
     if let Err(e) = r {
         return e.to_string();
     }
-    String::from("success")
+
+    r.unwrap()
 }
 
 #[tauri::command]
@@ -69,10 +73,14 @@ fn main() {
     let hd = home::home_dir().expect("unable to find the path to home directory");
     let hd = hd.join("catapult-data.json");
 
-    let cs = ConnectionStore::init(hd).expect("failed to initialize ConnectionStore");
+    let cs = ConnectionStore::init(hd);
+    if let Err(e) = cs {
+        println!("failed to initialize ConnectionStore: {}", e.to_string());
+        exit(1);
+    }
 
     tauri::Builder::default()
-        .manage(cs)
+        .manage(cs.unwrap())
         .invoke_handler(tauri::generate_handler![launch, import, delete, save, load_connections])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

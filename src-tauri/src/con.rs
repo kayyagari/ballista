@@ -3,29 +3,39 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use anyhow::Error;
 use serde::{Deserialize, Serialize};
 use home::env::Env;
 use home::env::OS_ENV;
+use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConnectionEntry {
-    address: String,
+    pub address: String,
     #[serde(rename="heapSize")]
-    heap_size: String,
-    icon: String,
-    id: String,
+    pub heap_size: String,
+    pub icon: String,
+    pub id: String,
     #[serde(rename="javaHome")]
-    java_home: String,
-    name: String,
-    username: Option<String>,
-    password: Option<String>
+    pub java_home: String,
+    pub name: String,
+    pub username: Option<String>,
+    pub password: Option<String>
 }
 
 pub struct ConnectionStore {
-    cache: Mutex<HashMap<String, ConnectionEntry>>,
+    cache: Mutex<HashMap<String, Arc<ConnectionEntry>>>,
     location: PathBuf
+}
+
+impl Default for ConnectionEntry {
+    fn default() -> Self {
+        let empty_str = String::from("");
+        ConnectionEntry{address: empty_str.clone(), heap_size: String::from("512m"), icon: empty_str.clone(),
+        id: Uuid::new_v4().to_string(), java_home: find_java_home(), name: empty_str.clone(), username: None,
+        password: None}
+    }
 }
 
 impl ConnectionStore {
@@ -40,7 +50,12 @@ impl ConnectionStore {
         let mut cache = HashMap::new();
         let data : serde_json::Result<HashMap<String, ConnectionEntry>> = serde_json::from_reader(f);
         if let Ok(data) = data {
-            cache = data;
+            for (id, ce) in data {
+                cache.insert(id, Arc::new(ce));
+            }
+        }
+        else {
+            println!("{}", data.err().unwrap().to_string());
         }
 
         Ok(ConnectionStore{location, cache: Mutex::new(cache)})
@@ -62,7 +77,16 @@ impl ConnectionStore {
         sb
     }
 
-    pub fn save(&self, mut ce: ConnectionEntry) -> Result<(), Error> {
+    pub fn get(&self, id: &str) -> Option<Arc<ConnectionEntry>> {
+        let cs = self.cache.lock().unwrap();
+        let val = cs.get(id);
+        if let Some(val) = val {
+            return Some(Arc::clone(val));
+        }
+        None
+    }
+
+    pub fn save(&self, mut ce: ConnectionEntry) -> Result<String, Error> {
         if ce.id.is_empty() {
             ce.id = uuid::Uuid::new_v4().to_string();
         }
@@ -73,9 +97,24 @@ impl ConnectionStore {
         }
         ce.java_home = jh;
 
-        self.cache.lock().unwrap().insert(ce.id.clone(), ce);
+        if let Some(ref username) = ce.username {
+            let username = username.trim();
+            if username.is_empty() {
+                ce.username = None;
+            }
+        }
+
+        if let Some(ref password) = ce.password {
+            let password = password.trim();
+            if password.is_empty() {
+                ce.username = None;
+            }
+        }
+
+        let data = serde_json::to_string(&ce)?;
+        self.cache.lock().unwrap().insert(ce.id.clone(), Arc::new(ce));
         self.flush_to_disk()?;
-        Ok(())
+        Ok(data)
     }
 
     pub fn delete(&self, id: &str) -> Result<(), Error> {
@@ -91,7 +130,7 @@ impl ConnectionStore {
         let java_home = find_java_home();
         for mut ce in data {
             ce.java_home = java_home.clone();
-            self.cache.lock().unwrap().insert(ce.id.clone(), ce);
+            self.cache.lock().unwrap().insert(ce.id.clone(), Arc::new(ce));
             count = count + 1;
         }
 

@@ -30,47 +30,21 @@ interface Connection {
     javaHome: string,
     name: string,
     username: string,
-    password: string,
-
-    // setAddress: (address: string) => void,
-    // setHeapSize: (heapSize: string) => void,
-    // setIcon: (icon: string) => void,
-    // setId: (id: string) => void,
-    // setJavaHome: (javaHome: string) => void,
-    // setName: (name: string) => void,
-    // setUsername: (username: string) => void,
-    // setPassword: (password: string) => void,
-    // setCurrentConnection: (cc: Connection) => void
+    password: string
 }
 
-/*const useResourceSearchStore = create<Connection>((set) => ({
-    address: "",
-    heapSize: "",
-    icon: "",
-    id: "",
-    javaHome: "",
-    name: "",
-    username: "",
-    password: "",
-    setAddress: (a) => set(() => ({ address: a })),
-    setHeapSize: (hs) => set(() => ({ heapSize: hs })),
-    setIcon: (ic) => set(() => ({ icon: ic })),
-    setId: (id) => set(() => ({ id: id })),
-    setJavaHome: (jh) => set(() => ({ javaHome: jh })),
-    setName: (n) => set(() => ({ name: n })),
-    setUsername: (un) => set(() => ({ username: un })),
-    setPassword: (p) => set(() => ({ password: p })),
-    setCurrentConnection: (cc: Connection) => set(() => ({
-        address: cc.address,
-        heapSize: cc.heapSize,
-        icon: cc.icon,
-        id: cc.id,
-        javaHome: cc.javaHome,
-        name: cc.name,
-        username: cc.username,
-        password: cc.password
-    }))
-}));*/
+function connectionSorter(c1: Connection, c2: Connection) {
+    let n1 = c1.name.toLowerCase();
+    let n2 = c2.name.toLowerCase();
+    if(n1 > n2) {
+        return 1;
+    }
+    else if(n1 < n2) {
+        return -1;
+    }
+
+    return 0;
+}
 
 type MenuItem = Required<MenuProps>['items'][number];
 
@@ -112,7 +86,7 @@ function App() {
 
     const [data, setData] = useState<Connection[]>([]);
 
-    const [cc, setCc] = useState<Connection>({
+    const emptyConnection: Connection = {
         address: "",
         heapSize: "",
         icon: "",
@@ -120,7 +94,11 @@ function App() {
         javaHome: "",
         name: "",
         username: "",
-        password: ""});
+        password: ""};
+
+    const [cc, setCc] = useState<Connection>({...emptyConnection});
+
+    const [dirty, setDirty] = useState<boolean>(false);
 
     useEffect(() => {loadConnections().then(d => {
         setData(d);
@@ -156,27 +134,17 @@ function App() {
         console.log("loading connections");
         const jsonArr: string = await invoke("load_connections");
         let data = JSON.parse(jsonArr);
-        data.sort((c1: Connection, c2: Connection) => {
-            let n1 = c1.name.toLowerCase();
-            let n2 = c2.name.toLowerCase();
-            if(n1 > n2) {
-                return 1;
-            }
-            else if(n1 < n2) {
-                return -1;
-            }
-
-            return 0;
-        });
+        data.sort(connectionSorter);
         return data;
     }
 
     async function launch() {
-        await invoke("launch", { url: cc.address, java_home: cc.javaHome, username: cc.username == null ? '' : cc.username, password: cc.password == null ? '' : cc.password });
+        await invoke("launch", { id: cc.id });
         //openNotification('topLeft', msg);
     }
     function createNew() {
-
+        setCc({...emptyConnection})
+        setDirty(false);
     }
     const handleMenuClick = ({ key, domEvent }: any) => {
         console.log(key);
@@ -190,6 +158,7 @@ function App() {
             ...cc,
             name: e.target.value
         })
+        setDirty(true);
     }
 
     function updateUrl(e: any) {
@@ -197,12 +166,14 @@ function App() {
             ...cc,
             address: e.target.value
         })
+        setDirty(true);
     }
     function updateUsername(e: any) {
         setCc({
             ...cc,
             username : e.target.value
         })
+        setDirty(true);
     }
 
     function updatePassword(e: any) {
@@ -210,19 +181,33 @@ function App() {
             ...cc,
             password: e.target.value
         })
+        setDirty(true);
     }
     function updateJavaHome(e: any) {
         setCc({
             ...cc,
             javaHome: e.target.value
         })
+        setDirty(true);
     }
 
     function deleteConnection() {
     }
 
-    function saveConnection() {
-
+    async function saveConnection() {
+        let saveResult: string = await invoke("save", {ce: JSON.stringify(cc)});
+        try {
+            let savedCon = JSON.parse(saveResult);
+            setCc({...savedCon});
+            setDirty(false);
+            let tmp = data.filter(c => c.id !== savedCon.id);;
+            tmp.push(savedCon);
+            tmp.sort(connectionSorter);
+            setData(tmp);
+        }
+        catch(e) {
+            //TODO handle it
+        }
     }
 
     function selectConnection(index: number) {
@@ -272,7 +257,7 @@ function App() {
                             <Col span={16}>
                                 <Input placeholder="MC URL e.g https://localhost:8443" size={"middle"} bordered value={cc.address} onChange={updateUrl} onPressEnter={launch} />
                             </Col>
-                            <Col><Button type={"primary"} onClick={launch} disabled={cc.address == ""} >Open</Button></Col>
+                            <Col><Button type={"primary"} onClick={launch} disabled={cc.id == "" || cc.address == ""} >Open</Button></Col>
                         </Row>
                         <Row align={'middle'} gutter={[24, 3]} style={{ marginBottom: 8 }}>
                             <Col span={4}>Username:</Col>
@@ -294,9 +279,11 @@ function App() {
                                 <Input placeholder={"Path to Java Home Directory"} size={"middle"} bordered value={cc.javaHome} onChange={updateJavaHome} />
                             </Col>
                         </Row>
-                        {/*<Row>*/}
-                        {/*    <Col span={20} style={{ marginTop: 20, alignContent: "end" }}><Button type={"primary"} onClick={saveConnection}>Save</Button></Col>*/}
-                        {/*</Row>*/}
+                        <Row>
+                            <Col span={20} style={{ marginTop: 20, alignContent: "end" }}>
+                                <Button type={"primary"} disabled={!dirty} onClick={saveConnection}>Save</Button>
+                            </Col>
+                        </Row>
                         {/*<Row style={{ marginTop: 230 }}>*/}
                         {/*    <Col style={{ alignContent: "end" }}><Button type={"primary"} danger onClick={deleteConnection}>Delete</Button></Col>*/}
                         {/*</Row>*/}
