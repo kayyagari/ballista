@@ -1,6 +1,6 @@
 import React, {useEffect, useState} from "react";
 import { invoke } from "@tauri-apps/api/tauri";
-import { open } from '@tauri-apps/api/dialog';
+import { open, confirm } from '@tauri-apps/api/dialog';
 import "./App.css";
 import {
     Avatar,
@@ -191,7 +191,37 @@ function App() {
         setDirty(true);
     }
 
-    function deleteConnection() {
+    function updateHeapSize(e: any) {
+        setCc({
+            ...cc,
+            heapSize: e.target.value
+        })
+        setDirty(true);
+    }
+
+    async function deleteConnection() {
+        const confirmed = await confirm('Do you want to delete connection ' + cc.name + '?', { title: '', type: 'warning' });
+        if(confirmed) {
+            const resp = await invoke("delete", {id: cc.id});
+            if(resp == "success") {
+                let i = -1;
+                let pos = -1;
+                let tmp = data.filter(c => {
+                    i++;
+                    if(c.id == cc.id) {
+                        pos = i;
+                    }
+                    return c.id !== cc.id;
+                });
+                setData(tmp);
+                if(pos != -1) {
+                    if(pos == tmp.length) {
+                        pos--;
+                    }
+                    setCc(tmp[pos])
+                }
+            }
+        }
     }
 
     async function saveConnection() {
@@ -223,7 +253,7 @@ function App() {
                           size="small"
                           dataSource={data}
                           renderItem={(item, index) => (
-                              <List.Item key={item.id} onClick={() => selectConnection(index)}>
+                              <List.Item key={item.id} onClick={() => selectConnection(index)} style={{background: cc.id == item.id ? 'lightgrey': 'white'}}>
                                   <List.Item.Meta
                                       avatar={<Avatar icon={<ApiOutlined />} />}
                                       title={item.name}
@@ -249,7 +279,7 @@ function App() {
                         <Row align={'middle'} gutter={[24, 3]} style={{ marginBottom: 50, marginTop: 10 }}>
                             <Col span={4}>Name:</Col>
                             <Col span={16}>
-                                <Input placeholder={"Connection's name e.g Acme Test Instance"} size={"middle"} bordered value={cc.name} onChange={updateName} />
+                                <Input placeholder={"Connection's name e.g Acme Test Instance"} size={"middle"} bordered value={cc.name} onChange={updateName} autoFocus={true}/>
                             </Col>
                         </Row>
                         <Row align={"middle"} gutter={[24, 3]} style={{ marginBottom: 8 }}>
@@ -279,14 +309,20 @@ function App() {
                                 <Input placeholder={"Path to Java Home Directory"} size={"middle"} bordered value={cc.javaHome} onChange={updateJavaHome} />
                             </Col>
                         </Row>
+                        <Row align={'middle'} gutter={[24, 3]}>
+                            <Col span={4}>Max Memory:</Col>
+                            <Col span={12}>
+                                <Input placeholder={"e.g. 512m or 2g "} size={"middle"} bordered value={cc.heapSize} onChange={updateHeapSize} />
+                            </Col>
+                        </Row>
                         <Row>
                             <Col span={20} style={{ marginTop: 20, alignContent: "end" }}>
                                 <Button type={"primary"} disabled={!dirty} onClick={saveConnection}>Save</Button>
                             </Col>
                         </Row>
-                        {/*<Row style={{ marginTop: 230 }}>*/}
-                        {/*    <Col style={{ alignContent: "end" }}><Button type={"primary"} danger onClick={deleteConnection}>Delete</Button></Col>*/}
-                        {/*</Row>*/}
+                        <Row style={{ marginTop: 185 }}>
+                            <Col style={{ alignContent: "end" }}><Button type={"primary"} danger onClick={deleteConnection} disabled={cc.id == ""}>Delete</Button></Col>
+                        </Row>
                     </div>
                 </Content>
             </Layout>

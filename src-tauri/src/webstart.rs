@@ -96,7 +96,7 @@ impl WebstartFile {
 
         let heap = ce.heap_size.trim();
         if !heap.is_empty() {
-            cmd.arg(heap);
+            cmd.args(["-Xmx", heap]);
         }
 
         cmd.arg("-cp")
