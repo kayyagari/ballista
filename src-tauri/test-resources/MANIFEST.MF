@@ -1,0 +1,21 @@
+Manifest-Version: 1.0
+Application-Name: Catapult Test Jar
+Built-By: dbugger
+Created-By: Apache Maven 3.6.0
+Build-Jdk: 1.8.0_352
+url: 
+authors: Sereen Systems: Kiran Ayyagari
+
+Name: com/sereen/catapult/App.class
+SHA-256-Digest: YD7chnl2dQvq+IPXfOPOw/82gctW0ZDXrqlVTprcPIs=
+
+Name: META-INF/maven/com.sereen.catapult/catapult-test-jar/pom.propert
+ ies
+SHA-256-Digest: EuvP5v5Pd2IOFjVJhMixzxIKy2baBE6a+hOWhtAyA/s=
+
+Name: META-INF/maven/com.sereen.catapult/catapult-test-jar/pom.xml
+SHA-256-Digest: hYrjJTvk33E2hMAm3jQFv94npqhurT1xC/89tZnhrpM=
+
+Name: log4j.properties
+SHA-256-Digest: qDNFTmmOPAopORClhI9oAJiLlPQLgoBBmz2MTWVTq34=
+

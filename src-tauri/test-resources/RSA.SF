@@ -1,0 +1,19 @@
+Signature-Version: 1.0
+SHA-256-Digest-Manifest-Main-Attributes: SrvXwDOQW2uH7eiPwlfR+ZwyjWW9A
+ bEfM7dU3f4rDKo=
+SHA-256-Digest-Manifest: VncmygtfITJAO9mhhNipU9kWkFhAMqFErwtkfZsGXBc=
+Created-By: 1.8.0_352 (Azul Systems, Inc.)
+
+Name: com/sereen/catapult/App.class
+SHA-256-Digest: MGAQ6snGyZKVKzAcSfzmq6+4KnwYK3lXBHl25PRKPMU=
+
+Name: META-INF/maven/com.sereen.catapult/catapult-test-jar/pom.propert
+ ies
+SHA-256-Digest: lEBFiKk6dpR0QEag30N+lOIQKOnGT17wKb8e/YNbWv4=
+
+Name: META-INF/maven/com.sereen.catapult/catapult-test-jar/pom.xml
+SHA-256-Digest: GUlGP/Ve5YYCc4jxXqE5XHpWLeLJshKzu2k8m9ulumE=
+
+Name: log4j.properties
+SHA-256-Digest: WZrTZ8yDNvEiIP9ZT1eLvyzRwwvQayYN5m8SY9QKQ4Q=
+

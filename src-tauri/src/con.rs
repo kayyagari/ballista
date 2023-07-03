@@ -21,7 +21,9 @@ pub struct ConnectionEntry {
     pub java_home: String,
     pub name: String,
     pub username: Option<String>,
-    pub password: Option<String>
+    pub password: Option<String>,
+    #[serde(default)]
+    pub verify: bool
 }
 
 pub struct ConnectionStore {
@@ -34,7 +36,7 @@ impl Default for ConnectionEntry {
         let empty_str = String::from("");
         ConnectionEntry{address: empty_str.clone(), heap_size: String::from("512m"), icon: empty_str.clone(),
         id: Uuid::new_v4().to_string(), java_home: find_java_home(), name: empty_str.clone(), username: None,
-        password: None}
+        password: None, verify: true}
     }
 }
 
