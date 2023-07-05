@@ -12,6 +12,7 @@ use crate::webstart::WebstartFile;
 mod webstart;
 mod con;
 mod verify;
+mod errors;
 
 #[tauri::command(rename_all = "snake_case")]
 fn launch(id: &str, cs: State<ConnectionStore>) -> String {

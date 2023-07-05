@@ -8,6 +8,8 @@ use anyhow::Error;
 use serde::{Deserialize, Serialize};
 use home::env::Env;
 use home::env::OS_ENV;
+use openssl::x509::store::{X509Store, X509StoreBuilder};
+use rustc_hash::FxHashMap;
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -22,13 +24,15 @@ pub struct ConnectionEntry {
     pub name: String,
     pub username: Option<String>,
     pub password: Option<String>,
-    #[serde(default)]
+    #[serde(default = "get_verify")]
     pub verify: bool
 }
 
 pub struct ConnectionStore {
     cache: Mutex<HashMap<String, Arc<ConnectionEntry>>>,
-    location: PathBuf
+    location: PathBuf,
+    cert_store: X509Store,
+    added_certs_location: PathBuf
 }
 
 impl Default for ConnectionEntry {
@@ -60,7 +64,17 @@ impl ConnectionStore {
             println!("{}", data.err().unwrap().to_string());
         }
 
-        Ok(ConnectionStore{location, cache: Mutex::new(cache)})
+        if !openssl_probe::has_ssl_cert_env_vars() {
+            println!("probing and setting OpenSSL environment variables");
+            openssl_probe::init_ssl_cert_env_vars();
+        }
+
+        let mut cert_store_builder = X509StoreBuilder::new()?;
+        cert_store_builder.set_default_paths()?;
+        let cert_store = cert_store_builder.build();
+        let added_certs_location = PathBuf::new();
+
+        Ok(ConnectionStore{location, cache: Mutex::new(cache), cert_store, added_certs_location})
     }
 
     pub fn to_json_array_string(&self) -> String {
@@ -169,4 +183,9 @@ pub fn find_java_home() -> String {
         }
     }
     java_home
+}
+
+fn get_verify() -> bool {
+    //println!("getting default value for verify attribute");
+    true
 }
