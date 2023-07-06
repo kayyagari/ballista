@@ -402,6 +402,7 @@ mod tests {
         println!("{:?}", r);
         assert!(r.is_err());
         let ve = r.err().unwrap();
+        println!("{}", ve.to_json().unwrap());
         let mut xb = X509StoreBuilder::new().unwrap();
         xb.add_cert(ve.cert.unwrap()).unwrap();
         let store = xb.build();

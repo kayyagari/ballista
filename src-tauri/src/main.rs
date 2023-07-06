@@ -2,12 +2,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::process::{Command, exit};
+use std::sync::Arc;
 use anyhow::Error;
 use home::env::Env;
 use tauri::State;
 
 use crate::con::{ConnectionEntry, ConnectionStore};
-use crate::webstart::WebstartFile;
+use crate::webstart::{WebStartCache, WebstartFile};
 
 mod webstart;
 mod con;
@@ -15,15 +16,26 @@ mod verify;
 mod errors;
 
 #[tauri::command(rename_all = "snake_case")]
-fn launch(id: &str, cs: State<ConnectionStore>) -> String {
+fn launch(id: &str, cs: State<ConnectionStore>, wc: State<WebStartCache>) -> String {
     let ce = cs.get(id);
     if let Some(ce) = ce {
-        let ws = WebstartFile::load(&ce.address);
-        if let Err(e) = ws {
-            return e.to_string();
-        }
+        let mut ws = wc.get(&ce.address);
+        if let None = ws {
+            let tmp = WebstartFile::load(&ce.address);
+            if let Err(e) = tmp {
+                return e.to_string();
+            }
 
-        let r = ws.unwrap().run(ce);
+            ws = Some(Arc::new(tmp.unwrap()));
+        }
+        let ws = ws.unwrap();
+        if ce.verify {
+            let verification_status = ws.verify(cs.get_cert_store());
+            if let Err(e) = verification_status {
+
+            }
+        }
+        let r = ws.run(ce);
         if let Err(e) = r {
             return  e.to_string();
         }
@@ -73,7 +85,6 @@ fn import(file_path: &str, cs: State<ConnectionStore>) -> String {
 fn main() {
     fix_path_env::fix();
     let hd = home::home_dir().expect("unable to find the path to home directory");
-    let hd = hd.join("catapult-data.json");
 
     let cs = ConnectionStore::init(hd);
     if let Err(e) = cs {
@@ -81,8 +92,10 @@ fn main() {
         exit(1);
     }
 
+    let wc = WebStartCache::init();
     tauri::Builder::default()
         .manage(cs.unwrap())
+        .manage(wc)
         .invoke_handler(tauri::generate_handler![launch, import, delete, save, load_connections])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

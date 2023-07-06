@@ -2,25 +2,62 @@ use std::fs::File;
 use std::os;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime};
+
 use anyhow::Error;
-use reqwest::blocking::{ClientBuilder, Client};
+use openssl::x509::store::X509StoreRef;
+use reqwest::blocking::{Client, ClientBuilder};
 use reqwest::Url;
 use roxmltree::{Document, Node};
-use sha2::{Sha256, Digest};
-use crate::con::ConnectionEntry;
+use rustc_hash::FxHashMap;
+use sha2::{Digest, Sha256};
+
+use crate::con::{ConnectionEntry, ConnectionStore};
+use crate::errors::VerificationError;
+use crate::verify::verify_jar;
 
 #[derive(Debug)]
 pub struct WebstartFile {
+    url: String,
     main_class: String,
     args: Vec<String>,
     //jars: Vec<Jar>,
-    tmp_dir: PathBuf
+    tmp_dir: PathBuf,
+    loaded_at: SystemTime
 }
 
 pub struct Jar {
     url: String,
     hash: String
+}
+
+pub struct WebStartCache {
+    cache: Mutex<FxHashMap<String, Arc<WebstartFile>>>
+}
+
+impl WebStartCache {
+    pub fn init() -> Self {
+        let cache = Mutex::new(FxHashMap::default());
+        WebStartCache{cache}
+    }
+
+    pub fn put(&mut self, wf: Arc<WebstartFile>) {
+        self.cache.lock().unwrap().insert(wf.url.clone(), wf);
+    }
+
+    pub fn get(&self, url: &str) -> Option<Arc<WebstartFile>> {
+        let cache = self.cache.lock().unwrap();
+        let wf = cache.get(url);
+        if let Some(wf) = wf {
+            let now = SystemTime::now();
+            let elapsed = now.duration_since(wf.loaded_at).expect("failed to calculate the duration");
+            if elapsed.as_secs() < 120 {
+                return Some(Arc::clone(wf));
+            }
+        }
+        None
+    }
 }
 
 impl WebstartFile {
@@ -55,7 +92,8 @@ impl WebstartFile {
             download_jars(&resources_node, &client, dir_path, base_url)?;
         }
 
-        let ws = WebstartFile{main_class, tmp_dir, args};
+        let loaded_at = SystemTime::now();
+        let ws = WebstartFile{url: base_url.to_string(), main_class, tmp_dir, args, loaded_at};
 
         Ok(ws)
     }
@@ -63,7 +101,7 @@ impl WebstartFile {
     pub fn run(&self, ce: Arc<ConnectionEntry>) -> Result<(), Error> {
         let itr = self.tmp_dir.read_dir()?;
         let mut classpath = String::with_capacity(1024);
-        let mut rhino_classpath = String::with_capacity(100);
+        let mut rhino_classpath = String::with_capacity(128);
         for e in itr {
             let e = e?;
             let file_path = e.path();
@@ -82,6 +120,7 @@ impl WebstartFile {
         }
 
         classpath.push_str(&rhino_classpath);
+
         //println!("class path: {}", classpath);
         let mut cmd;
         let java_home = ce.java_home.trim();
@@ -112,6 +151,26 @@ impl WebstartFile {
         }
 
         cmd.spawn()?;
+        Ok(())
+    }
+
+    pub fn verify(&self, cert_store: &X509StoreRef) -> Result<(), VerificationError> {
+        let mut jar_files = Vec::with_capacity(128);
+        let itr = self.tmp_dir.read_dir().expect("failed to read the jar files directory");
+        for e in itr {
+            let e = e.expect("failed to list a directory entry");
+            let file_path = e.path();
+            jar_files.push(file_path);
+        }
+
+        jar_files.sort_unstable();
+        println!("{:?}", jar_files);
+
+        for jf in jar_files {
+            let file_path = jf.as_os_str();
+            let file_path = file_path.to_str().unwrap();
+            verify_jar(file_path, cert_store)?;
+        }
         Ok(())
     }
 }

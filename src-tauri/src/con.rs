@@ -8,7 +8,8 @@ use anyhow::Error;
 use serde::{Deserialize, Serialize};
 use home::env::Env;
 use home::env::OS_ENV;
-use openssl::x509::store::{X509Store, X509StoreBuilder};
+use openssl::x509::store::{X509Store, X509StoreBuilder, X509StoreRef};
+use openssl::x509::X509;
 use rustc_hash::FxHashMap;
 use uuid::Uuid;
 
@@ -30,9 +31,9 @@ pub struct ConnectionEntry {
 
 pub struct ConnectionStore {
     cache: Mutex<HashMap<String, Arc<ConnectionEntry>>>,
-    location: PathBuf,
+    con_location: PathBuf,
     cert_store: X509Store,
-    added_certs_location: PathBuf
+    trusted_certs_location: PathBuf
 }
 
 impl Default for ConnectionEntry {
@@ -45,16 +46,16 @@ impl Default for ConnectionEntry {
 }
 
 impl ConnectionStore {
-    pub fn init(location: PathBuf) -> Result<Self, Error> {
-        let mut f = File::open(&location);
-        if let Err(e) = f {
-            f = File::create(&location);
+    pub fn init(data_dir_path: PathBuf) -> Result<Self, Error> {
+        let con_location = data_dir_path.join("catapult-data.json");
+        let mut con_location_file = File::open(&con_location);
+        if let Err(e) = con_location_file {
+            con_location_file = File::create(&con_location);
         }
-
-        let f = f?;
+        let con_location_file = con_location_file?;
 
         let mut cache = HashMap::new();
-        let data : serde_json::Result<HashMap<String, ConnectionEntry>> = serde_json::from_reader(f);
+        let data : serde_json::Result<HashMap<String, ConnectionEntry>> = serde_json::from_reader(con_location_file);
         if let Ok(data) = data {
             for (id, ce) in data {
                 cache.insert(id, Arc::new(ce));
@@ -64,17 +65,15 @@ impl ConnectionStore {
             println!("{}", data.err().unwrap().to_string());
         }
 
-        if !openssl_probe::has_ssl_cert_env_vars() {
-            println!("probing and setting OpenSSL environment variables");
-            openssl_probe::init_ssl_cert_env_vars();
-        }
+        let trusted_certs_location = data_dir_path.join("trusted-certs.json");
+        let certs = parse_trusted_certs(&trusted_certs_location);
+        let cert_store = create_cert_store(certs);
+        // if let Err(e) = trusted_certs_location_file {
+        //     trusted_certs_location_file = File::create(&trusted_certs_location);
+        // }
+        // let trusted_certs_location_file = trusted_certs_location_file?;
 
-        let mut cert_store_builder = X509StoreBuilder::new()?;
-        cert_store_builder.set_default_paths()?;
-        let cert_store = cert_store_builder.build();
-        let added_certs_location = PathBuf::new();
-
-        Ok(ConnectionStore{location, cache: Mutex::new(cache), cert_store, added_certs_location})
+        Ok(ConnectionStore{ con_location, cache: Mutex::new(cache), cert_store, trusted_certs_location })
     }
 
     pub fn to_json_array_string(&self) -> String {
@@ -154,14 +153,39 @@ impl ConnectionStore {
         Ok(format!("imported {} connections", count))
     }
 
+    pub fn add_trusted_cert(&mut self, cert_der: &str) -> Result<(), Error> {
+        let mut certs = parse_trusted_certs(&self.trusted_certs_location);
+        let cert_der = openssl::base64::decode_block(cert_der)?;
+        let cert = X509::from_der(cert_der.as_slice())?;
+        certs.push(cert);
+
+        let mut der_certs = Vec::with_capacity(certs.len());
+        for c in &certs {
+            let der = c.to_der()?;
+            let der = openssl::base64::encode_block(der.as_slice());
+            der_certs.push(der);
+        }
+        let val = serde_json::to_string(&der_certs)?;
+        let mut f = OpenOptions::new().append(false).write(true).open(&self.trusted_certs_location)?;
+        f.write_all(val.as_bytes())?;
+
+        let new_store = create_cert_store(certs);
+        self.cert_store = new_store;
+        Ok(())
+    }
+
+    pub fn get_cert_store(&self) -> &X509StoreRef {
+        self.cert_store.as_ref()
+    }
+
     fn flush_to_disk(&self) -> Result<(), Error> {
         let val = serde_json::to_string(&self.cache)?;
-        let mut f = OpenOptions::new().write(true).open(&self.location);
+        let mut f = OpenOptions::new().append(false).write(true).open(&self.con_location);
         if let Err(e) = f {
             println!("unable to open file for writing: {}", e.to_string());
             return Err(Error::new(e));
         }
-        let r = f.unwrap().write_all(val.as_bytes())?;
+        f.unwrap().write_all(val.as_bytes())?;
         Ok(())
     }
 }
@@ -183,6 +207,51 @@ pub fn find_java_home() -> String {
         }
     }
     java_home
+}
+
+fn parse_trusted_certs(trusted_certs_location: &PathBuf) -> Vec<X509> {
+    let mut certs = Vec::new();
+    let mut trusted_certs_location_file = File::open(trusted_certs_location);
+    if let Ok(trusted_certs_location_file) = trusted_certs_location_file {
+        let cert_map : serde_json::Result<FxHashMap<String, String>> = serde_json::from_reader(trusted_certs_location_file);
+        if let Ok(cert_map) = cert_map {
+            for (key, der_data) in cert_map {
+                let der_data = openssl::base64::decode_block(&der_data);
+                if let Ok(der_data) = der_data {
+                    let c = X509::from_der(der_data.as_slice());
+                    if let Ok(c) = c {
+                        certs.push(c);
+                    }
+                    else {
+                        println!("failed to parse cert from DER data with key {} {:?}", key, c.err());
+                    }
+                }
+                else {
+                    println!("invalid base64 encoded data with key {} {:?}", key, der_data.err());
+                }
+            }
+        }
+        else {
+            println!("failed to parse trusted certificates JSON file {:?} {:?}", trusted_certs_location, cert_map.err());
+        }
+    }
+
+    println!("found {} trusted certificates", certs.len());
+    certs
+}
+
+fn create_cert_store(certs: Vec<X509>) -> X509Store {
+    if !openssl_probe::has_ssl_cert_env_vars() {
+        println!("probing and setting OpenSSL environment variables");
+        openssl_probe::init_ssl_cert_env_vars();
+    }
+    let mut cert_store_builder = X509StoreBuilder::new().expect("unable to created X509 store builder");
+    cert_store_builder.set_default_paths().expect("failed to load system default trusted certs");
+    for c in certs {
+        cert_store_builder.add_cert(c).expect("failed to add a cert to the in-memory store");
+    }
+
+    cert_store_builder.build()
 }
 
 fn get_verify() -> bool {
