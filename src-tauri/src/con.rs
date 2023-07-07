@@ -11,6 +11,7 @@ use home::env::OS_ENV;
 use openssl::x509::store::{X509Store, X509StoreBuilder, X509StoreRef};
 use openssl::x509::X509;
 use rustc_hash::FxHashMap;
+use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -32,7 +33,7 @@ pub struct ConnectionEntry {
 pub struct ConnectionStore {
     cache: Mutex<HashMap<String, Arc<ConnectionEntry>>>,
     con_location: PathBuf,
-    cert_store: X509Store,
+    cert_store: Mutex<Arc<X509Store>>,
     trusted_certs_location: PathBuf
 }
 
@@ -73,7 +74,7 @@ impl ConnectionStore {
         // }
         // let trusted_certs_location_file = trusted_certs_location_file?;
 
-        Ok(ConnectionStore{ con_location, cache: Mutex::new(cache), cert_store, trusted_certs_location })
+        Ok(ConnectionStore{ con_location, cache: Mutex::new(cache), cert_store: Mutex::new(Arc::new(cert_store)), trusted_certs_location })
     }
 
     pub fn to_json_array_string(&self) -> String {
@@ -153,34 +154,42 @@ impl ConnectionStore {
         Ok(format!("imported {} connections", count))
     }
 
-    pub fn add_trusted_cert(&mut self, cert_der: &str) -> Result<(), Error> {
+    pub fn add_trusted_cert(&self, cert_der: &str) -> Result<(), Error> {
         let mut certs = parse_trusted_certs(&self.trusted_certs_location);
+        let mut hasher = Sha256::new();
+        hasher.update(cert_der);
+        let hash = hasher.finalize();
+        let hash = hex::encode(&hash);
+
         let cert_der = openssl::base64::decode_block(cert_der)?;
         let cert = X509::from_der(cert_der.as_slice())?;
-        certs.push(cert);
+        if let None = certs.get(&hash) {
+            certs.insert(hash, cert);
+        }
 
-        let mut der_certs = Vec::with_capacity(certs.len());
-        for c in &certs {
+        let mut der_certs = FxHashMap::default();
+        for (key, c) in &certs {
             let der = c.to_der()?;
             let der = openssl::base64::encode_block(der.as_slice());
-            der_certs.push(der);
+            der_certs.insert(key.to_string(), der);
         }
         let val = serde_json::to_string(&der_certs)?;
-        let mut f = OpenOptions::new().append(false).write(true).open(&self.trusted_certs_location)?;
+        let mut f = OpenOptions::new().append(false).create(true).write(true).open(&self.trusted_certs_location)?;
         f.write_all(val.as_bytes())?;
 
         let new_store = create_cert_store(certs);
-        self.cert_store = new_store;
+        *self.cert_store.lock().unwrap() = Arc::new(new_store);
         Ok(())
     }
 
-    pub fn get_cert_store(&self) -> &X509StoreRef {
-        self.cert_store.as_ref()
+    pub fn get_cert_store(&self) -> Arc<X509Store> {
+        let t = self.cert_store.lock().unwrap();
+        t.clone()
     }
 
     fn flush_to_disk(&self) -> Result<(), Error> {
         let val = serde_json::to_string(&self.cache)?;
-        let mut f = OpenOptions::new().append(false).write(true).open(&self.con_location);
+        let mut f = OpenOptions::new().append(false).create(true).write(true).open(&self.con_location);
         if let Err(e) = f {
             println!("unable to open file for writing: {}", e.to_string());
             return Err(Error::new(e));
@@ -209,8 +218,8 @@ pub fn find_java_home() -> String {
     java_home
 }
 
-fn parse_trusted_certs(trusted_certs_location: &PathBuf) -> Vec<X509> {
-    let mut certs = Vec::new();
+fn parse_trusted_certs(trusted_certs_location: &PathBuf) -> FxHashMap<String, X509> {
+    let mut certs = FxHashMap::default();
     let mut trusted_certs_location_file = File::open(trusted_certs_location);
     if let Ok(trusted_certs_location_file) = trusted_certs_location_file {
         let cert_map : serde_json::Result<FxHashMap<String, String>> = serde_json::from_reader(trusted_certs_location_file);
@@ -220,7 +229,7 @@ fn parse_trusted_certs(trusted_certs_location: &PathBuf) -> Vec<X509> {
                 if let Ok(der_data) = der_data {
                     let c = X509::from_der(der_data.as_slice());
                     if let Ok(c) = c {
-                        certs.push(c);
+                        certs.insert(key, c);
                     }
                     else {
                         println!("failed to parse cert from DER data with key {} {:?}", key, c.err());
@@ -240,14 +249,14 @@ fn parse_trusted_certs(trusted_certs_location: &PathBuf) -> Vec<X509> {
     certs
 }
 
-fn create_cert_store(certs: Vec<X509>) -> X509Store {
+fn create_cert_store(certs: FxHashMap<String, X509>) -> X509Store {
     if !openssl_probe::has_ssl_cert_env_vars() {
         println!("probing and setting OpenSSL environment variables");
         openssl_probe::init_ssl_cert_env_vars();
     }
     let mut cert_store_builder = X509StoreBuilder::new().expect("unable to created X509 store builder");
     cert_store_builder.set_default_paths().expect("failed to load system default trusted certs");
-    for c in certs {
+    for (_, c) in certs {
         cert_store_builder.add_cert(c).expect("failed to add a cert to the in-memory store");
     }
 

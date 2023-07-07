@@ -2,6 +2,7 @@ import React, {useEffect, useState} from "react";
 import { invoke } from "@tauri-apps/api/tauri";
 import { open, confirm } from '@tauri-apps/api/dialog';
 import "./App.css";
+import './CertDialog'
 import {
     Avatar,
     Button,
@@ -15,10 +16,13 @@ import {
     Row,
     notification,
     theme,
-    Upload
+    Upload,
+    Modal,
+    Checkbox
 } from "antd";
 import { ApiOutlined, EyeInvisibleOutlined, EyeTwoTone, SettingOutlined } from "@ant-design/icons";
 import type { NotificationPlacement } from 'antd/es/notification/interface';
+import CertDialog from "./CertDialog";
 
 const { Content, Sider } = Layout;
 
@@ -30,7 +34,8 @@ interface Connection {
     javaHome: string,
     name: string,
     username: string,
-    password: string
+    password: string,
+    verify: boolean
 }
 
 function connectionSorter(c1: Connection, c2: Connection) {
@@ -94,11 +99,14 @@ function App() {
         javaHome: "",
         name: "",
         username: "",
-        password: ""};
+        password: "",
+        verify: true};
 
     const [cc, setCc] = useState<Connection>({...emptyConnection});
 
     const [dirty, setDirty] = useState<boolean>(false);
+
+    const [cert, setCert] = useState<object>({});
 
     useEffect(() => {loadConnections().then(d => {
         setData(d);
@@ -139,8 +147,24 @@ function App() {
     }
 
     async function launch() {
-        await invoke("launch", { id: cc.id });
+        let resp: string = await invoke("launch", { id: cc.id });
+        console.log(resp);
+        let result: any = JSON.parse(resp);
+        console.log(result);
+        if(result.code == 1) {
+            console.log("setting cert");
+            setCert(result.cert);
+        }
         //openNotification('topLeft', msg);
+    }
+
+    async function trustAndLaunch() {
+        await invoke("trust_cert", { cert: cert.der });
+        setCert({});
+        launch();
+    }
+    function abortLaunch() {
+        setCert({});
     }
     function createNew() {
         setCc({...emptyConnection})
@@ -195,6 +219,14 @@ function App() {
         setCc({
             ...cc,
             heapSize: e.target.value
+        })
+        setDirty(true);
+    }
+
+    function updateVerify(e: any) {
+        setCc({
+            ...cc,
+            verify: e.target.checked
         })
         setDirty(true);
     }
@@ -314,6 +346,9 @@ function App() {
                             <Col span={12}>
                                 <Input placeholder={"e.g. 512m or 2g "} size={"middle"} bordered value={cc.heapSize} onChange={updateHeapSize} />
                             </Col>
+                            <Col>
+                                <Checkbox checked={cc.verify} onChange={updateVerify}>Verify JAR files</Checkbox>
+                            </Col>
                         </Row>
                         <Row>
                             <Col span={20} style={{ marginTop: 20, alignContent: "end" }}>
@@ -324,6 +359,7 @@ function App() {
                             <Col style={{ alignContent: "end" }}><Button type={"primary"} danger onClick={deleteConnection} disabled={cc.id == ""}>Delete</Button></Col>
                         </Row>
                     </div>
+                    <CertDialog trustAndLaunch={trustAndLaunch} abortLaunch={abortLaunch} cert={cert}/>
                 </Content>
             </Layout>
         </Layout>

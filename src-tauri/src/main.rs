@@ -23,25 +23,29 @@ fn launch(id: &str, cs: State<ConnectionStore>, wc: State<WebStartCache>) -> Str
         if let None = ws {
             let tmp = WebstartFile::load(&ce.address);
             if let Err(e) = tmp {
-                return e.to_string();
+                println!("{}", e.to_string());
+                return  String::from("{\"code\": -1}");
             }
 
             ws = Some(Arc::new(tmp.unwrap()));
         }
         let ws = ws.unwrap();
         if ce.verify {
-            let verification_status = ws.verify(cs.get_cert_store());
+            let verification_status = ws.verify(cs.get_cert_store().as_ref());
             if let Err(e) = verification_status {
-
+                let resp = e.to_json();
+                println!("{}", resp);
+                return resp;
             }
         }
         let r = ws.run(ce);
         if let Err(e) = r {
-            return  e.to_string();
+            println!("{}", e.to_string());
+            return  String::from("{\"code\": -1}");
         }
     }
 
-    String::from("success")
+    String::from("{\"code\": 0}")
 }
 
 #[tauri::command]
@@ -82,6 +86,15 @@ fn import(file_path: &str, cs: State<ConnectionStore>) -> String {
     r.unwrap()
 }
 
+#[tauri::command(rename_all = "snake_case")]
+fn trust_cert(cert: &str, cs: State<ConnectionStore>) -> String {
+    let r = cs.add_trusted_cert(cert);
+    if let Err(e) = r {
+        return e.to_string();
+    }
+    String::from("success")
+}
+
 fn main() {
     fix_path_env::fix();
     let hd = home::home_dir().expect("unable to find the path to home directory");
@@ -96,7 +109,7 @@ fn main() {
     tauri::Builder::default()
         .manage(cs.unwrap())
         .manage(wc)
-        .invoke_handler(tauri::generate_handler![launch, import, delete, save, load_connections])
+        .invoke_handler(tauri::generate_handler![launch, import, delete, save, load_connections, trust_cert])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

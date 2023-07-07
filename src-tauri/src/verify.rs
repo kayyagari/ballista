@@ -71,19 +71,24 @@ impl Manifest {
 
             let (k, v) = kv.unwrap();
             if k == "Name" {
-                let next_line = Manifest::read_line(&mut buf);
-                if let None = next_line {
-                    break;
+                loop { // until XXX-Digest key is found
+                    let next_line = Manifest::read_line(&mut buf);
+                    if let None = next_line {
+                        break;
+                    }
+                    let next_kv = Manifest::get_key_val(&next_line);
+                    if let None = next_kv {
+                        break; // a newline encountered and there is no XXX-Digest value for this Name
+                    }
+                    let (key, value) = next_kv.unwrap();
+                    if key.ends_with(DIGEST_KEY_SUFFIX) {
+                        let alg = key.replace(DIGEST_KEY_SUFFIX, "");
+                        let digest = value.trim().to_string();
+                        let class_entry = v.trim().to_string();
+                        name_digests.insert(class_entry, (alg, digest));
+                        break;
+                    }
                 }
-                let next_kv = Manifest::get_key_val(&next_line);
-                if let None = next_kv {
-                    continue;
-                }
-                let (alg, digest) = next_kv.unwrap();
-                let alg = alg.replace(DIGEST_KEY_SUFFIX, "");
-                let digest = digest.trim().to_string();
-                let class_entry = v.trim().to_string();
-                name_digests.insert(class_entry, (alg, digest));
             }
             else  {
                 if k.ends_with(DIGEST_MANIFEST_SUFFIX) {
@@ -176,15 +181,25 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
     let mut signatures = Vec::new();
     const META_INF_PREFIX_PATH: &'static str = "META-INF/";
     const DOT_SF_SUFFIX: &'static str = ".SF";
-    for name in za.file_names() {
-        println!("{}", name);
-        if name.starts_with(META_INF_PREFIX_PATH) && name.ends_with(DOT_SF_SUFFIX) {
-            let sf_block_prefix = name.replace(META_INF_PREFIX_PATH, "").replace(DOT_SF_SUFFIX, "");
-            signatures.push((name.to_string(), sf_block_prefix));
+    const MC_SIGNATURE_FILE: &'static str = "META-INF/SERVER.SF";
+
+    {
+        // give preference to the MC's signature file, if exists
+        if let Ok(_) = za.by_name(MC_SIGNATURE_FILE) {
+            signatures.push((MC_SIGNATURE_FILE.to_string(), "SERVER".to_string()));
+        }
+    }
+    if signatures.is_empty() {
+        for name in za.file_names() {
+            //println!("{}", name);
+            if name.starts_with(META_INF_PREFIX_PATH) && name.ends_with(DOT_SF_SUFFIX) {
+                let sf_block_prefix = name.replace(META_INF_PREFIX_PATH, "").replace(DOT_SF_SUFFIX, "");
+                signatures.push((name.to_string(), sf_block_prefix));
+            }
         }
     }
 
-    println!("{:?}", signatures);
+    //println!("{:?}", signatures);
     let manifest_buf;
     {
         let mut manifest_entry_file = za.by_name("META-INF/MANIFEST.MF")?;
@@ -192,7 +207,7 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
     }
 
     let manifest = Manifest::parse("MANIFEST.MF", manifest_buf.as_slice())?;
-    println!("{:?}", manifest);
+    //println!("{:?}", manifest);
 
     if signatures.is_empty() {
         return Err(VerificationError{cert: None, msg: format!("{} is not signed", file_path)});
@@ -222,14 +237,17 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
 
             // https://docs.oracle.com/en/java/javase/20/docs/specs/man/jarsigner.html
             // #1 Verify the signature of the .SF file.
+            println!("verifying {} of {}", sf_name, file_path);
             let mut cms_info = openssl::cms::CmsContentInfo::from_der(sigblock)?;
             let r = cms_info.verify(None, Some(cert_store), Some(sigmanifest_buf.as_slice()), None, CMSOptions::empty());
             if let Err(e) = r {
                 let msg = e.to_string();
-                if msg.contains("cms_signerinfo_verify_cert") {
-                    return Err(VerificationError{cert, msg});
+                if !msg.contains("unsupported certificate purpose") { // FIXME find a better way to tell OpenSSL to not check the certificate extensions
+                    if msg.contains("cms_signerinfo_verify_cert") {
+                        return Err(VerificationError{cert, msg});
+                    }
+                    return Err(VerificationError{cert:None, msg});
                 }
-                return Err(VerificationError{cert:None, msg});
             }
 
             // #2 Verify the digest listed in each entry in the .SF file with each corresponding section in the manifest.
@@ -269,16 +287,25 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
             for (jar_entry_name, (jar_entry_digest_alg, jar_entry_digest)) in &sigmanifest.name_digests {
                 let mut ctx = openssl::md_ctx::MdCtx::new().unwrap();
                 ctx.digest_init(digest_ref)?;
-                let mut f = za.by_name(jar_entry_name)?;
+                let mut f = za.by_name(jar_entry_name);
+                if let Err(ref e) = f {
+                    println!("entry {} not found in {} {}", jar_entry_name, file_path, e.to_string());
+                    continue;
+                }
+                let mut f = f.unwrap();
+                if f.is_dir() {
+                    println!("entry {} of {} is a directory, skipping digest check", jar_entry_name, file_path);
+                    continue;
+                }
                 f.read_to_end(&mut buf)?;
                 ctx.digest_update(buf.as_slice())?;
                 ctx.digest_final(&mut computed_digest_output)?;
 
                 let computed_digest = openssl::base64::encode_block(&computed_digest_output);
-                let (m_alg, m_digest) = manifest.name_digests.get(jar_entry_name).unwrap(); // safe to unwrap
-                println!("comparing digests [{} === {}] for {}", m_digest, computed_digest, jar_entry_name);
+                let (m_alg, m_digest) = manifest.name_digests.get(jar_entry_name).expect("missing MANIFEST entry"); // safe to unwrap
+                //println!("comparing digests [{} === {}] for {}", m_digest, computed_digest, jar_entry_name);
                 if m_digest != &computed_digest {
-                    let msg = format!("digest mismatch for {}", jar_entry_name);
+                    let msg = format!("{} digest mismatch(manifest={} != computed={}) for {} in {}", jar_entry_digest_alg, m_digest, computed_digest, jar_entry_name, file_path);
                     return Err(VerificationError{cert: None, msg});
                 }
                 buf.clear();
@@ -316,6 +343,7 @@ fn read_file(zf: &mut ZipFile) -> Result<Vec<u8>, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
+    use std::collections::VecDeque;
     use openssl::ssl::SslFiletype;
     use openssl::x509::store::{HashDir, X509Lookup, X509StoreBuilder};
     // use asn1::{ParseResult, SimpleAsn1Writable, WriteBuf, Writer};
@@ -402,9 +430,10 @@ mod tests {
         println!("{:?}", r);
         assert!(r.is_err());
         let ve = r.err().unwrap();
-        println!("{}", ve.to_json().unwrap());
+        println!("{}", ve.to_json());
+        let cert = ve.cert.unwrap();
         let mut xb = X509StoreBuilder::new().unwrap();
-        xb.add_cert(ve.cert.unwrap()).unwrap();
+        xb.add_cert(cert).unwrap();
         let store = xb.build();
         let r = verify_jar(jar_file, store.as_ref());
         println!("{:?}", r);
