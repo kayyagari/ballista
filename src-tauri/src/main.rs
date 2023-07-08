@@ -5,6 +5,7 @@ use std::process::{Command, exit};
 use std::sync::Arc;
 use anyhow::Error;
 use home::env::Env;
+use serde_json::Number;
 use tauri::State;
 
 use crate::con::{ConnectionEntry, ConnectionStore};
@@ -23,8 +24,9 @@ fn launch(id: &str, cs: State<ConnectionStore>, wc: State<WebStartCache>) -> Str
         if let None = ws {
             let tmp = WebstartFile::load(&ce.address);
             if let Err(e) = tmp {
-                println!("{}", e.to_string());
-                return  String::from("{\"code\": -1}");
+                let msg = e.to_string();
+                println!("{}", msg);
+                return  create_json_resp(-1, &msg);
             }
 
             ws = Some(Arc::new(tmp.unwrap()));
@@ -40,8 +42,9 @@ fn launch(id: &str, cs: State<ConnectionStore>, wc: State<WebStartCache>) -> Str
         }
         let r = ws.run(ce);
         if let Err(e) = r {
-            println!("{}", e.to_string());
-            return  String::from("{\"code\": -1}");
+            let msg = e.to_string();
+            println!("{}", msg);
+            return  create_json_resp(-1, &msg);
         }
     }
 
@@ -112,4 +115,11 @@ fn main() {
         .invoke_handler(tauri::generate_handler![launch, import, delete, save, load_connections, trust_cert])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+fn create_json_resp(code: i32, msg: &str) -> String {
+    let mut obj = serde_json::Map::new();
+    obj.insert("code".to_string(), serde_json::Value::Number(Number::from(code)));
+    obj.insert("msg".to_string(), serde_json::Value::String(String::from(msg)));
+    serde_json::to_string(&obj).unwrap()
 }

@@ -1,7 +1,7 @@
 use std::fs::File;
 use std::os;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime};
 
@@ -150,6 +150,8 @@ impl WebstartFile {
             }
         }
 
+        let f = File::create("/tmp/catapult.log")?;
+        cmd.stdout(Stdio::from(f));
         cmd.spawn()?;
         Ok(())
     }

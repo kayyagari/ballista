@@ -14,15 +14,13 @@ import {
     Menu,
     MenuProps,
     Row,
-    notification,
     theme,
-    Upload,
     Modal,
-    Checkbox
+    Checkbox, Spin, notification
 } from "antd";
 import { ApiOutlined, EyeInvisibleOutlined, EyeTwoTone, SettingOutlined } from "@ant-design/icons";
-import type { NotificationPlacement } from 'antd/es/notification/interface';
 import CertDialog from "./CertDialog";
+import {NotificationPlacement} from "antd/es/notification/interface";
 
 const { Content, Sider } = Layout;
 
@@ -78,16 +76,14 @@ function App() {
     const {
         token: { colorBgContainer },
     } = theme.useToken();
-    // const [api, contextHolder] = notification.useNotification();
-    // const openNotification = (placement: NotificationPlacement, msg: string) => {
-    //     api.info({
-    //         message: `Notification ${placement}`,
-    //         description: <Context.Consumer>{({ name }) => `${msg}`}</Context.Consumer>,
-    //         placement,
-    //     });
-    // };
-
-    //const store = useResourceSearchStore();
+    const [api, contextHolder] = notification.useNotification();
+    const openNotification = (placement: NotificationPlacement, msg: string) => {
+        api.info({
+            message: `Error`,
+            description: <Context.Consumer>{({ name }) => `${msg}`}</Context.Consumer>,
+            placement
+        });
+    };
 
     const [data, setData] = useState<Connection[]>([]);
 
@@ -107,6 +103,7 @@ function App() {
     const [dirty, setDirty] = useState<boolean>(false);
 
     const [cert, setCert] = useState<object>({});
+    const [loading, setLoading] = useState(false);
 
     useEffect(() => {loadConnections().then(d => {
         setData(d);
@@ -147,15 +144,21 @@ function App() {
     }
 
     async function launch() {
-        let resp: string = await invoke("launch", { id: cc.id });
-        console.log(resp);
-        let result: any = JSON.parse(resp);
-        console.log(result);
-        if(result.code == 1) {
-            console.log("setting cert");
-            setCert(result.cert);
+        setLoading(true);
+        try {
+            let resp: string = await invoke("launch", { id: cc.id });
+            let result: any = JSON.parse(resp);
+            if(result.code == 1) {
+                setCert(result.cert);
+            }
+            setLoading(false);
+            if(result.code == -1) {
+                openNotification('topRight', result.msg);
+            }
         }
-        //openNotification('topLeft', msg);
+        catch (e) {
+            setLoading(false);
+        }
     }
 
     async function trustAndLaunch() {
@@ -278,6 +281,9 @@ function App() {
     }
 
     return (
+        <Context.Provider value={{name: ""}}>
+        {contextHolder}
+        <Spin spinning={loading}>
         <Layout className='layout' style={{ height: '90vh' }}>
             <Sider width={'30%'} style={{ height: '400' }} theme={"light"} >
                 <div style={{overflow: 'auto', height: '79%'}}>
@@ -363,6 +369,8 @@ function App() {
                 </Content>
             </Layout>
         </Layout>
+        </Spin>
+        </Context.Provider>
     );
 }
 
