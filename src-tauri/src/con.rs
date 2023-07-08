@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
+use std::ops::Deref;
 use std::path::PathBuf;
 use std::process::{Command, ExitStatus};
 use std::sync::{Arc, Mutex};
@@ -66,7 +67,7 @@ impl ConnectionStore {
             println!("{}", data.err().unwrap().to_string());
         }
 
-        let trusted_certs_location = data_dir_path.join("trusted-certs.json");
+        let trusted_certs_location = data_dir_path.join("catapult-trusted-certs.json");
         let certs = parse_trusted_certs(&trusted_certs_location);
         let cert_store = create_cert_store(certs);
         // if let Err(e) = trusted_certs_location_file {
@@ -129,13 +130,13 @@ impl ConnectionStore {
 
         let data = serde_json::to_string(&ce)?;
         self.cache.lock().unwrap().insert(ce.id.clone(), Arc::new(ce));
-        self.flush_to_disk()?;
+        self.write_connections_to_disk()?;
         Ok(data)
     }
 
     pub fn delete(&self, id: &str) -> Result<(), Error> {
         self.cache.lock().unwrap().remove(id);
-        self.flush_to_disk()?;
+        self.write_connections_to_disk()?;
         Ok(())
     }
 
@@ -150,7 +151,7 @@ impl ConnectionStore {
             count = count + 1;
         }
 
-        self.flush_to_disk()?;
+        self.write_connections_to_disk()?;
         Ok(format!("imported {} connections", count))
     }
 
@@ -173,7 +174,7 @@ impl ConnectionStore {
             let der = openssl::base64::encode_block(der.as_slice());
             der_certs.insert(key.to_string(), der);
         }
-        let val = serde_json::to_string(&der_certs)?;
+        let val = serde_json::to_string_pretty(&der_certs)?;
         let mut f = OpenOptions::new().append(false).create(true).write(true).open(&self.trusted_certs_location)?;
         f.write_all(val.as_bytes())?;
 
@@ -187,8 +188,9 @@ impl ConnectionStore {
         t.clone()
     }
 
-    fn flush_to_disk(&self) -> Result<(), Error> {
-        let val = serde_json::to_string(&self.cache)?;
+    fn write_connections_to_disk(&self) -> Result<(), Error> {
+        let c = self.cache.lock().unwrap();
+        let val = serde_json::to_string_pretty(c.deref())?;
         let mut f = OpenOptions::new().append(false).create(true).write(true).open(&self.con_location);
         if let Err(e) = f {
             println!("unable to open file for writing: {}", e.to_string());
