@@ -175,7 +175,7 @@ impl ConnectionStore {
             der_certs.insert(key.to_string(), der);
         }
         let val = serde_json::to_string_pretty(&der_certs)?;
-        let mut f = OpenOptions::new().append(false).create(true).write(true).open(&self.trusted_certs_location)?;
+        let mut f = OpenOptions::new().append(false).create(true).write(true).truncate(true).open(&self.trusted_certs_location)?;
         f.write_all(val.as_bytes())?;
 
         let new_store = create_cert_store(certs);
