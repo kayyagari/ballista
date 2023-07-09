@@ -191,7 +191,7 @@ impl ConnectionStore {
     fn write_connections_to_disk(&self) -> Result<(), Error> {
         let c = self.cache.lock().unwrap();
         let val = serde_json::to_string_pretty(c.deref())?;
-        let mut f = OpenOptions::new().append(false).create(true).write(true).open(&self.con_location);
+        let mut f = OpenOptions::new().append(false).create(true).write(true).truncate(true).open(&self.con_location);
         if let Err(e) = f {
             println!("unable to open file for writing: {}", e.to_string());
             return Err(Error::new(e));
