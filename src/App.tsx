@@ -284,9 +284,9 @@ function App() {
         <Context.Provider value={{name: ""}}>
         {contextHolder}
         <Spin spinning={loading}>
-        <Layout className='layout' style={{ height: '90vh' }}>
-            <Sider width={'30%'} style={{ height: '400' }} theme={"light"} >
-                <div style={{overflow: 'auto', height: '79%'}}>
+        <Layout className='layout' style={{ height: '97vh' }}>
+            <Sider width={'30%'} style={{ height: '470' }} theme={"light"} >
+                <div style={{overflow: 'auto', height: '90%'}}>
                     <List header={<span style={{ margin: '34%', fontSize: 15, color: 'brown'}}>Connections</span>}
                           size="small"
                           dataSource={data}
@@ -301,7 +301,6 @@ function App() {
                           )}
                     />
                 </div>
-                <Divider />
                 <Row align={'middle'} style={{height: '5'}} gutter={[24, 3]}>
                     <Col>
                         <Menu theme="light" mode="horizontal" triggerSubMenuAction="click" items={items} onClick={handleMenuClick} />
