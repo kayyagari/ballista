@@ -1,7 +1,14 @@
 import React from "react";
 import {Modal} from "antd";
 
-const CertDialog: React.FC<{cert: object, trustAndLaunch: any, abortLaunch: any}> = ({cert, trustAndLaunch, abortLaunch}) => {
+export interface UntrustedCert {
+    der?: string,
+    subject?: string,
+    issuer?: string,
+    expires_on?: string
+}
+
+const CertDialog: React.FC<{cert: UntrustedCert, trustAndLaunch: any, abortLaunch: any}> = ({cert, trustAndLaunch, abortLaunch}) => {
     if(cert.der !== undefined) {
         return (<Modal title="Untrusted Certificate" open={true} onOk={trustAndLaunch} onCancel={abortLaunch}
         okText={"Yes"} cancelText={"No"}>

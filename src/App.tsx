@@ -19,7 +19,7 @@ import {
     Checkbox, Spin, notification
 } from "antd";
 import { ApiOutlined, EyeInvisibleOutlined, EyeTwoTone, SettingOutlined } from "@ant-design/icons";
-import CertDialog from "./CertDialog";
+import CertDialog, {UntrustedCert} from "./CertDialog";
 import {NotificationPlacement} from "antd/es/notification/interface";
 
 const { Content, Sider } = Layout;
@@ -102,7 +102,12 @@ function App() {
 
     const [dirty, setDirty] = useState<boolean>(false);
 
-    const [cert, setCert] = useState<object>({});
+    const [cert, setCert] = useState<UntrustedCert>({
+        der: undefined,
+        subject: undefined,
+        issuer: undefined,
+        expires_on: undefined
+    });
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {loadConnections().then(d => {
