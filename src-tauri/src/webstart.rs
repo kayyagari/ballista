@@ -100,26 +100,32 @@ impl WebstartFile {
 
     pub fn run(&self, ce: Arc<ConnectionEntry>) -> Result<(), Error> {
         let itr = self.tmp_dir.read_dir()?;
-        let mut classpath = String::with_capacity(1024);
-        let mut rhino_classpath = String::with_capacity(128);
+        let mut classpath = String::with_capacity(1152);
+        let mut classpath_suffix = String::with_capacity(1024);
         for e in itr {
             let e = e?;
+            if e.metadata().unwrap().is_dir() {
+                continue;
+            }
             let file_path = e.path();
+            let file_name = file_path.file_name().unwrap();
             let file_path = file_path.as_os_str();
             let file_path = file_path.to_str().unwrap();
             //println!("{}", file_path);
+            // MirthConnect's own jars contain some overridden classes
+            // of the dependent libraries and hence must be loaded first
             // https://forums.mirthproject.io/forum/mirth-connect/support/15524-using-com-mirth-connect-client-core-client
-            if file_path.to_lowercase().contains("rhino") {
-                rhino_classpath.push_str(file_path);
-                rhino_classpath.push(':');
-            }
-            else {
+            if file_name.to_str().unwrap().starts_with("mirth") {
                 classpath.push_str(file_path);
                 classpath.push(':');
             }
+            else {
+                classpath_suffix.push_str(file_path);
+                classpath_suffix.push(':');
+            }
         }
 
-        classpath.push_str(&rhino_classpath);
+        classpath.push_str(&classpath_suffix);
 
         //println!("class path: {}", classpath);
         let mut cmd;
