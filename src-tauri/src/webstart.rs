@@ -13,7 +13,7 @@ use roxmltree::{Document, Node};
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 
-use crate::con::{ConnectionEntry, ConnectionStore};
+use crate::connection::{ConnectionEntry, ConnectionStore};
 use crate::errors::VerificationError;
 use crate::verify::verify_jar;
 

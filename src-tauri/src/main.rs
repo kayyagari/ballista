@@ -8,11 +8,11 @@ use home::env::Env;
 use serde_json::Number;
 use tauri::State;
 
-use crate::con::{ConnectionEntry, ConnectionStore};
+use crate::connection::{ConnectionEntry, ConnectionStore};
 use crate::webstart::{WebStartCache, WebstartFile};
 
 mod webstart;
-mod con;
+mod connection;
 mod verify;
 mod errors;
 
