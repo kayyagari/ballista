@@ -329,7 +329,7 @@ function App() {
                             <Col span={16}>
                                 <Input placeholder="MC URL e.g https://localhost:8443" size={"middle"} bordered value={cc.address} onChange={updateUrl} onPressEnter={launch} />
                             </Col>
-                            <Col><Button type={"primary"} onClick={launch} disabled={cc.id == "" || cc.address == ""} >Open</Button></Col>
+                            <Col><Button type={"primary"} onClick={launch} disabled={cc.id == "" || cc.address == "" || dirty} >Open</Button></Col>
                         </Row>
                         <Row align={'middle'} gutter={[24, 3]} style={{ marginBottom: 8 }}>
                             <Col span={4}>Username:</Col>
