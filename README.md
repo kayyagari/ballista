@@ -2,9 +2,10 @@
 A lean and simple launcher for Mirth Connect Admin Client.
 
 ## How To Use
-1. Open the application
-2. If not already done then import `<MCAL-root>/data/connections.json`
+1. Go to releases and download a suitable installer for your OS platform
+2. Create a new connection or if you are using MirthConnect Admin Launcher then import existing connections from `<MCAL-root>/data/connections.json`
 3. Select a connection from the list of connections on the left hand side
+4. Adjust the `Java Home` field's value if necessary (please note that Catapult assumes JRE version 8 or higher was already installed on the local machine)
 4. Click on `Open`
 
 ## Compiling
