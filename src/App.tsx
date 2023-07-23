@@ -16,38 +16,23 @@ import {
     Row,
     theme,
     Modal,
-    Checkbox, Spin, notification
+    Checkbox, Spin, notification, Tree
 } from "antd";
-import { ApiOutlined, EyeInvisibleOutlined, EyeTwoTone, SettingOutlined } from "@ant-design/icons";
+import type { DataNode } from 'antd/es/tree';
+import {ApiOutlined, CarryOutOutlined, EyeInvisibleOutlined, EyeTwoTone, SettingOutlined} from "@ant-design/icons";
 import CertDialog, {UntrustedCert} from "./CertDialog";
 import {NotificationPlacement} from "antd/es/notification/interface";
+import {
+    Connection,
+    connectionSorter,
+    DEFAULT_GROUP_NAME,
+    loadConnections,
+    orderConnections,
+    searchConnection, searchText
+} from './connection';
+import Search from "antd/es/input/Search";
 
 const { Content, Sider } = Layout;
-
-interface Connection {
-    address: string,
-    heapSize: string,
-    icon: string,
-    id: string,
-    javaHome: string,
-    name: string,
-    username: string,
-    password: string,
-    verify: boolean
-}
-
-function connectionSorter(c1: Connection, c2: Connection) {
-    let n1 = c1.name.toLowerCase();
-    let n2 = c2.name.toLowerCase();
-    if(n1 > n2) {
-        return 1;
-    }
-    else if(n1 < n2) {
-        return -1;
-    }
-
-    return 0;
-}
 
 type MenuItem = Required<MenuProps>['items'][number];
 
@@ -86,6 +71,8 @@ function App() {
     };
 
     const [data, setData] = useState<Connection[]>([]);
+    const [treeData, setTreeData] = useState<DataNode[]>([]);
+    const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
 
     const emptyConnection: Connection = {
         address: "",
@@ -96,7 +83,9 @@ function App() {
         name: "",
         username: "",
         password: "",
-        verify: true};
+        verify: true,
+        group: "Default",
+        notes: ""};
 
     const [cc, setCc] = useState<Connection>({...emptyConnection});
 
@@ -112,6 +101,7 @@ function App() {
 
     useEffect(() => {loadConnections().then(d => {
         setData(d);
+        createTreeNodes(d);
         if(d.length > 0) {
             setCc(d[0])
         }
@@ -131,6 +121,7 @@ function App() {
             console.log("after invoking import")
             loadConnections().then(d => {
                 setData(d);
+                createTreeNodes(d);
                 for(let i =0; i < d.length; i++) {
                     if(cc.id == d[i].id) {
                         setCc(d[i]);
@@ -138,14 +129,6 @@ function App() {
                 }
             })
         }
-    }
-
-    async function loadConnections() {
-        console.log("loading connections");
-        const jsonArr: string = await invoke("load_connections");
-        let data = JSON.parse(jsonArr);
-        data.sort(connectionSorter);
-        return data;
     }
 
     async function launch() {
@@ -178,6 +161,41 @@ function App() {
         setCc({...emptyConnection})
         setDirty(false);
     }
+
+    function createTreeNodes(d: Connection[]) {
+        if(d.length == 0) {
+            return;
+        }
+        let orderedConMap = orderConnections(d);
+        let nodes: DataNode[] = [];
+        for(let i = 0; i < orderedConMap.groupNames.length; i++) {
+            let name = orderedConMap.groupNames[i];
+            let groupedCons = orderedConMap.groupConnMap[name];
+            let conNodes: DataNode[] = [];
+            let parentKey = i.toString();
+            for(let j = 0; j < groupedCons.length; j++) {
+                let c = groupedCons[j];
+                let node = {
+                  title: c.name,
+                  key: parentKey + "-" + j.toString(),
+                  con: c,
+                  icon: <CarryOutOutlined />
+                };
+                conNodes.push(node);
+            }
+
+            let groupNode = {
+                title: name,
+                key: parentKey,
+                icon: <CarryOutOutlined />,
+                children: conNodes
+            };
+            nodes.push(groupNode);
+        }
+        setTreeData(nodes);
+        //setExpandedKeys(["0-0"]);
+    }
+
     const handleMenuClick = ({ key, domEvent }: any) => {
         console.log(key);
         if (key == 'import') {
@@ -239,6 +257,21 @@ function App() {
         setDirty(true);
     }
 
+    function updateNotes(e: any) {
+        setCc({
+            ...cc,
+            notes: e.target.value
+        })
+        setDirty(true);
+    }
+
+    function updateGroup(e: any) {
+        setCc({
+            ...cc,
+            group: e.target.value
+        })
+        setDirty(true);
+    }
     async function deleteConnection() {
         const confirmed = await confirm('Do you want to delete connection ' + cc.name + '?', { title: '', type: 'warning' });
         if(confirmed) {
@@ -265,6 +298,10 @@ function App() {
     }
 
     async function saveConnection() {
+        if(cc.group.trim().length == 0) {
+            cc.group = DEFAULT_GROUP_NAME;
+        }
+
         let saveResult: string = await invoke("save", {ce: JSON.stringify(cc)});
         try {
             let savedCon = JSON.parse(saveResult);
@@ -272,8 +309,8 @@ function App() {
             setDirty(false);
             let tmp = data.filter(c => c.id !== savedCon.id);;
             tmp.push(savedCon);
-            tmp.sort(connectionSorter);
             setData(tmp);
+            createTreeNodes(tmp);
         }
         catch(e) {
             //TODO handle it
@@ -285,6 +322,45 @@ function App() {
         console.log("selected connection " + index);
     }
 
+    const getParentKey = (key: React.Key, tree: DataNode[]): React.Key => {
+        let parentKey: React.Key;
+        for (let i = 0; i < tree.length; i++) {
+            const node = tree[i];
+            if (node.children) {
+                if (node.children.some((item) => item.key === key)) {
+                    parentKey = node.key;
+                } else {
+                    let tmp = getParentKey(key, node.children);
+                    if(tmp) {
+                        parentKey = tmp;
+                    }
+                }
+            }
+        }
+        return parentKey!;
+    };
+
+    const onTreeNodeSelect = (selectedKeys: React.Key[], info: any) => {
+        if(info.node.con) {
+            setCc(info.node.con);
+        }
+    };
+
+    const searchConnections = (e: React.ChangeEvent<HTMLInputElement>) => {
+        let {value} = e.target;
+        value = value.trim();
+        if(value.length == 0) {
+            createTreeNodes(data);
+            return;
+        }
+        if(value.length < 2) {
+            return;
+        }
+        let filteredCons = data.filter((c) => searchText(value, c));
+        createTreeNodes(filteredCons);
+        setExpandedKeys(["0-0"])
+    };
+
     return (
         <Context.Provider value={{name: ""}}>
         {contextHolder}
@@ -292,18 +368,12 @@ function App() {
         <Layout className='layout' style={{ height: '97vh' }}>
             <Sider width={'30%'} style={{ height: '470' }} theme={"light"} >
                 <div style={{overflow: 'auto', height: '90%'}}>
-                    <List header={<span style={{ margin: '34%', fontSize: 15, color: 'brown'}}>Connections</span>}
-                          size="small"
-                          dataSource={data}
-                          renderItem={(item, index) => (
-                              <List.Item key={item.id} onClick={() => selectConnection(index)} style={{background: cc.id == item.id ? 'lightgrey': 'white'}}>
-                                  <List.Item.Meta
-                                      avatar={<Avatar icon={<ApiOutlined />} />}
-                                      title={item.name}
-                                      description={item.name}
-                                  />
-                              </List.Item>
-                          )}
+                    <Search style={{ marginBottom: 8 }} placeholder="Search" onChange={searchConnections} />
+                    <Tree
+                        showLine={true}
+                        defaultExpandedKeys={expandedKeys}
+                        onSelect={onTreeNodeSelect}
+                        treeData={treeData}
                     />
                 </div>
                 <Row align={'middle'} style={{height: '5'}} gutter={[24, 3]}>
@@ -360,12 +430,18 @@ function App() {
                                 <Checkbox checked={cc.verify} onChange={updateVerify}>Verify JAR files</Checkbox>
                             </Col>
                         </Row>
+                        <Row align={'middle'} gutter={[24, 3]}>
+                            <Col span={4}>Group:</Col>
+                            <Col span={12}>
+                                <Input placeholder={"Name of the connection's group"} size={"middle"} bordered value={cc.group} onChange={updateGroup} />
+                            </Col>
+                        </Row>
                         <Row>
                             <Col span={20} style={{ marginTop: 20, alignContent: "end" }}>
                                 <Button type={"primary"} disabled={!dirty} onClick={saveConnection}>Save</Button>
                             </Col>
                         </Row>
-                        <Row style={{ marginTop: 185 }}>
+                        <Row style={{ marginTop: 150 }}>
                             <Col style={{ alignContent: "end" }}><Button type={"primary"} danger onClick={deleteConnection} disabled={cc.id == ""}>Delete</Button></Col>
                         </Row>
                     </div>

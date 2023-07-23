@@ -28,7 +28,11 @@ pub struct ConnectionEntry {
     pub username: Option<String>,
     pub password: Option<String>,
     #[serde(default = "get_verify")]
-    pub verify: bool
+    pub verify: bool,
+    #[serde(default = "get_default_group")]
+    pub group: String,
+    #[serde(default = "get_default_notes")]
+    pub notes: String
 }
 
 pub struct ConnectionStore {
@@ -43,7 +47,7 @@ impl Default for ConnectionEntry {
         let empty_str = String::from("");
         ConnectionEntry{address: empty_str.clone(), heap_size: String::from("512m"), icon: empty_str.clone(),
         id: Uuid::new_v4().to_string(), java_home: find_java_home(), name: empty_str.clone(), username: None,
-        password: None, verify: true}
+        password: None, verify: true, group: get_default_group(), notes: get_default_notes()}
     }
 }
 
@@ -268,4 +272,12 @@ fn create_cert_store(certs: FxHashMap<String, X509>) -> X509Store {
 fn get_verify() -> bool {
     //println!("getting default value for verify attribute");
     true
+}
+
+fn get_default_group() -> String {
+    String::from("Default")
+}
+
+fn get_default_notes() -> String {
+    String::from("")
 }
