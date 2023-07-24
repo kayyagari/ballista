@@ -25,7 +25,7 @@ export async function loadConnections() {
 }
 
 export function orderConnections(data: Connection[]) {
-    let groupConnMap = {};
+    let groupConnMap: any = {};
     let prevGroup = null;
     for(let i =0; i < data.length; i++) {
         let con = data[i];

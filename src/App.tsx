@@ -1,4 +1,4 @@
-import React, {useEffect, useState} from "react";
+import React, {useEffect, useRef, useState} from "react";
 import { invoke } from "@tauri-apps/api/tauri";
 import { open, confirm } from '@tauri-apps/api/dialog';
 import "./App.css";
@@ -16,10 +16,17 @@ import {
     Row,
     theme,
     Modal,
-    Checkbox, Spin, notification, Tree
+    Checkbox, Spin, notification, Tree, Select, Space, InputRef
 } from "antd";
 import type { DataNode } from 'antd/es/tree';
-import {ApiOutlined, CarryOutOutlined, EyeInvisibleOutlined, EyeTwoTone, SettingOutlined} from "@ant-design/icons";
+import {
+    ApiOutlined,
+    CarryOutOutlined,
+    EyeInvisibleOutlined,
+    EyeTwoTone,
+    PlusOutlined,
+    SettingOutlined
+} from "@ant-design/icons";
 import CertDialog, {UntrustedCert} from "./CertDialog";
 import {NotificationPlacement} from "antd/es/notification/interface";
 import {
@@ -28,7 +35,7 @@ import {
     DEFAULT_GROUP_NAME,
     loadConnections,
     orderConnections,
-    searchConnection, searchText
+    searchText
 } from './connection';
 import Search from "antd/es/input/Search";
 
@@ -69,10 +76,14 @@ function App() {
             placement
         });
     };
-
     const [data, setData] = useState<Connection[]>([]);
+
     const [treeData, setTreeData] = useState<DataNode[]>([]);
     const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
+
+    const [newGroupName, setNewGroupName] = useState("");
+    const [groupNames, setGroupNames] = useState([DEFAULT_GROUP_NAME]);
+    const groupInputRef = useRef<InputRef>(null); // for the group name selection
 
     const emptyConnection: Connection = {
         address: "",
@@ -103,7 +114,17 @@ function App() {
         setData(d);
         createTreeNodes(d);
         if(d.length > 0) {
-            setCc(d[0])
+            setCc(d[0]);
+            // also gather the group names for once
+            let titles = new Array();
+            for(let i = 0; i < d.length; i++) {
+                let g = d[i].group;
+                if(titles.indexOf(g) == -1) {
+                    titles.push(g);
+                }
+            }
+            titles.sort();
+            setGroupNames(titles);
         }
     })}, [])
     async function importConnections(e: any) {
@@ -193,7 +214,7 @@ function App() {
             nodes.push(groupNode);
         }
         setTreeData(nodes);
-        //setExpandedKeys(["0-0"]);
+        setExpandedKeys(["0-0"]);
     }
 
     const handleMenuClick = ({ key, domEvent }: any) => {
@@ -265,10 +286,10 @@ function App() {
         setDirty(true);
     }
 
-    function updateGroup(e: any) {
+    function updateGroup(name: string) {
         setCc({
             ...cc,
-            group: e.target.value
+            group: name
         })
         setDirty(true);
     }
@@ -361,6 +382,32 @@ function App() {
         setExpandedKeys(["0-0"])
     };
 
+    const updateNewGroupName = (event: React.ChangeEvent<HTMLInputElement>) => {
+        setNewGroupName(event.target.value);
+    };
+    const addNewGroup = (e: React.MouseEvent<HTMLButtonElement | HTMLAnchorElement>) => {
+        e.preventDefault();
+        let tmp = newGroupName.trim().toLowerCase();
+        if(tmp.length == 0) {
+            return;
+        }
+        let exists = false;
+        for(let i = 0; i < groupNames.length; i++) {
+            if(groupNames[i].toLowerCase() == tmp) {
+                exists = true;
+            }
+        }
+        if(!exists) {
+            let tmp = [...groupNames, newGroupName]
+            tmp.sort();
+            setGroupNames(tmp);
+        }
+        setNewGroupName("");
+        setTimeout(() => {
+            groupInputRef.current?.focus();
+        }, 0);
+    };
+
     return (
         <Context.Provider value={{name: ""}}>
         {contextHolder}
@@ -433,7 +480,28 @@ function App() {
                         <Row align={'middle'} gutter={[24, 3]}>
                             <Col span={4}>Group:</Col>
                             <Col span={12}>
-                                <Input placeholder={"Name of the connection's group"} size={"middle"} bordered value={cc.group} onChange={updateGroup} />
+                                <Select
+                                    style={{ width: 300 }}
+                                    placeholder="Name of the connection's group"
+                                    value={cc.group}
+                                    onChange={updateGroup}
+                                    dropdownRender={(menu) => (
+                                        <>
+                                            {menu}
+                                            <Divider style={{ margin: '8px 0' }} />
+                                            <Space style={{ padding: '0 8px 4px' }}>
+                                                <Input
+                                                    placeholder="New group name"
+                                                    ref={groupInputRef}
+                                                    value={newGroupName}
+                                                    onChange={updateNewGroupName}
+                                                />
+                                                <Button type="text" icon={<PlusOutlined />} onClick={addNewGroup}/>
+                                            </Space>
+                                        </>
+                                    )}
+                                    options={groupNames.map((name) => ({ label: name, value: name }))}
+                                />
                             </Col>
                         </Row>
                         <Row>
