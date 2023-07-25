@@ -99,9 +99,12 @@ fn trust_cert(cert: &str, cs: State<ConnectionStore>) -> String {
 }
 
 fn main() {
-    fix_path_env::fix();
-    let hd = home::home_dir().expect("unable to find the path to home directory");
+    let env_fix = fix_path_env::fix_vars(&["JAVA_HOME", "PATH"]);
+    if let Err(e) = env_fix {
+        println!("failed to read JAVA_HOME and PATH environment variables");
+    }
 
+    let hd = home::home_dir().expect("unable to find the path to home directory");
     let cs = ConnectionStore::init(hd);
     if let Err(e) = cs {
         println!("failed to initialize ConnectionStore: {}", e.to_string());
