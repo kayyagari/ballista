@@ -22,14 +22,17 @@ pub struct WebstartFile {
     url: String,
     main_class: String,
     args: Vec<String>,
+    j2ses: Option<Vec<J2se>>,
     //jars: Vec<Jar>,
     tmp_dir: PathBuf,
     loaded_at: SystemTime
 }
 
-pub struct Jar {
-    url: String,
-    hash: String
+/// from jnlp -> resources -> j2se
+#[derive(Debug)]
+pub struct J2se {
+    java_vm_args: Option<String>,
+    version: String
 }
 
 pub struct WebStartCache {
@@ -88,12 +91,14 @@ impl WebstartFile {
         let dir_path = tmp_dir.as_path();
         std::fs::create_dir_all(dir_path)?;
 
+        let mut j2ses = None;
         if let Some(resources_node) = resources_node {
+            j2ses = get_j2ses(&resources_node);
             download_jars(&resources_node, &client, dir_path, base_url)?;
         }
 
         let loaded_at = SystemTime::now();
-        let ws = WebstartFile{url: base_url.to_string(), main_class, tmp_dir, args, loaded_at};
+        let ws = WebstartFile{url: base_url.to_string(), main_class, tmp_dir, args, loaded_at, j2ses};
 
         Ok(ws)
     }
@@ -138,6 +143,20 @@ impl WebstartFile {
         }
 
         println!("using java from: {:?}", cmd.get_program().to_str());
+
+        if let Some(ref vm_args) = self.j2ses {
+            for va in vm_args {
+                // if there are VM args for java version >= 1.9
+                // then set the JDK_JAVA_OPTIONS environment variable
+                // this will be ignored by java version <= 1.8
+                if va.version.contains("1.9") {
+                    if let Some(java_vm_args) = &va.java_vm_args {
+                        println!("setting JDK_JAVA_OPTIONS environment variable with the java-vm-args given for version {} in JNLP file", va.version);
+                        cmd.env("JDK_JAVA_OPTIONS", java_vm_args);
+                    }
+                }
+            }
+        }
 
         let heap = ce.heap_size.trim();
         if !heap.is_empty() {
@@ -230,6 +249,26 @@ fn get_client_args(root: &Node) -> Vec<String> {
         }
     }
     args
+}
+
+fn get_j2ses(resources: &Node) -> Option<Vec<J2se>> {
+    let mut j2ses = Vec::new();
+    for n in resources.descendants() {
+        if n.has_tag_name("j2se") {
+            // only consider those that have java-vm-args and version
+            if let Some(java_vm_args) = n.attribute("java-vm-args") {
+                if let Some(version) = n.attribute("version") {
+                    let java_vm_args = Some(java_vm_args.to_string());
+                    let j2se = J2se{ java_vm_args, version: version.to_string()};
+                    j2ses.push(j2se);
+                }
+            }
+        }
+    }
+    if !j2ses.is_empty() {
+        return Some(j2ses);
+    }
+    None
 }
 
 fn get_node<'a>(root: &'a Node, tag_name: &str) -> Option<Node<'a, 'a>> {
