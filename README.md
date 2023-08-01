@@ -14,6 +14,8 @@ These compilation instructions are written for users not familiar with Rust and 
 
 You should generally follow the Tauri Getting started guide: https://tauri.app/v1/guides/getting-started/prerequisites
 
+A good reference for how to run builds is the file .github/workflows/build-catapault.yml . If you can replicate the same steps the build pipeline does, then you should have good builds!
+
 ### MacOS
 
 1. Open the project in VS Code. Let VS code install the suggested plugins.
@@ -29,4 +31,15 @@ Should be very similar to MacOS.
 
 ### Windows 
 
-Please make a PR if you use Windows and know how to compile the app
+Please make a PR if you use Windows and know how to compile the app!
+
+___Follow the instructions at___: https://tauri.app/v1/guides/getting-started/prerequisites/#setting-up-windows
+
+Follow the openssl instructions at: https://docs.rs/crate/openssl/0.9.24 *EXCEPT* you have to use different commands to set env vars in PowerShell:
+```
+$env:OPENSSL_DIR='C:\Program Files\OpenSSL-Win64\'
+$env:OPENSSL_INCLUDE_DIR='C:\Program Files\OpenSSL-Win64\include'
+$env:OPENSSL_LIB_DIR='C:\Program Files\OpenSSL-Win64\lib'
+$env:OPENSSL_NO_VENDOR=1
+Get-ChildItem Env
+```

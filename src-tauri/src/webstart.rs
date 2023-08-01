@@ -3,13 +3,12 @@ use std::{env, os};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
-use std::time::{Duration, SystemTime};
+use std::time::{SystemTime};
 
 use anyhow::Error;
 use openssl::x509::store::X509StoreRef;
 use reqwest::blocking::{Client, ClientBuilder};
-use reqwest::Url;
-use roxmltree::{Document, Node};
+use roxmltree::Node;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 
@@ -71,10 +70,12 @@ impl WebstartFile {
 
         let r = client.get(&webstart).send()?;
         let data = r.text()?;
+        //TODO VERY NOISY, is there a log level lower than debug?
+        //println!("Got response from MC as: {:?}", data);
         let doc = roxmltree::Document::parse(&data)?;
 
         let root = doc.root();
-        let main_class_node = get_node(&root, "application-desc").expect("application-desc node");
+        let main_class_node = get_node(&root, "application-desc").expect("Got something from MC that was not an application-desc node in a JNLP XML");
         let main_class = main_class_node.attribute("main-class").expect("missing main-class attribute").to_string();
         let args = get_client_args(&main_class_node);
 
@@ -117,17 +118,22 @@ impl WebstartFile {
             let file_name = file_path.file_name().unwrap();
             let file_path = file_path.as_os_str();
             let file_path = file_path.to_str().unwrap();
+
+            //In Windows the CP separator is ';' and literally every other OS is ':'
+            let classpath_separator = if cfg!(windows) {';'} else  {':' };
+
             //println!("{}", file_path);
             // MirthConnect's own jars contain some overridden classes
             // of the dependent libraries and hence must be loaded first
             // https://forums.mirthproject.io/forum/mirth-connect/support/15524-using-com-mirth-connect-client-core-client
+            //TODO this should probably build the classpath objects as an ordered set, then do a .join(classpath_separator)
             if file_name.to_str().unwrap().starts_with("mirth") {
                 classpath.push_str(file_path);
-                classpath.push(':');
+                classpath.push(classpath_separator);
             }
             else {
                 classpath_suffix.push_str(file_path);
-                classpath_suffix.push(':');
+                classpath_suffix.push(classpath_separator);
             }
         }
 
@@ -180,6 +186,8 @@ impl WebstartFile {
         println!("log_file_path {:?}", log_file_path);
         let f = File::create(log_file_path)?;
         cmd.stdout(Stdio::from(f));
+        //TODO noisy, should be a debug logger
+        //println!("Executing with: {:?}", cmd);
         cmd.spawn()?;
         Ok(())
     }
