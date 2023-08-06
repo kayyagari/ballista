@@ -292,6 +292,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
+name = "ballista"
+version = "0.2.0"
+dependencies = [
+ "anyhow",
+ "asn1-rs",
+ "fix-path-env",
+ "hex",
+ "home",
+ "openssl",
+ "openssl-probe",
+ "reqwest",
+ "roxmltree",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "uuid",
+ "zip",
+]
+
+[[package]]
 name = "base64"
 version = "0.13.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"

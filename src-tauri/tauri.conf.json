@@ -7,7 +7,7 @@
     "withGlobalTauri": false
   },
   "package": {
-    "productName": "Catapult",
+    "productName": "Ballista",
     "version": "0.3.0-snapshot"
   },
   "tauri": {
@@ -38,14 +38,14 @@
       {
         "fullscreen": false,
         "resizable": true,
-        "title": "Catapult",
+        "title": "Ballista",
         "width": 900,
         "height": 600
       }
     ],
     "systemTray": {
       "iconPath": "icons/favicon.ico",
-      "title": "Catapult"
+      "title": "Ballista"
     }
   }
 }
