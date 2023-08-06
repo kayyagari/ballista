@@ -138,7 +138,7 @@ fn create_json_resp(code: i32, msg: &str) -> String {
 }
 
 fn move_file(old: PathBuf, new: PathBuf) {
-    if old.exists() {
+    if old.exists() && !new.exists() {
         let r = fs::rename(&old, &new);
         if let Err(e) = r {
             println!("failed to move the file from {:?} to {:?} : {}", old, new, e.to_string());
