@@ -85,7 +85,7 @@ impl WebstartFile {
         hasher.update(&webstart);
         let hash = hasher.finalize();
         let hash = hex::encode(&hash);
-        let tmp_dir = env::temp_dir().join(format!("catapult/{}", hash));
+        let tmp_dir = env::temp_dir().join(format!("ballista/{}", hash));
         println!("creating directory {:?}", tmp_dir);
         if tmp_dir.exists() {
             std::fs::remove_dir_all(&tmp_dir)?;
@@ -182,7 +182,7 @@ impl WebstartFile {
             }
         }
 
-        let log_file_path = env::temp_dir().join("catapult.log");
+        let log_file_path = env::temp_dir().join("ballista.log");
         println!("log_file_path {:?}", log_file_path);
         let f = File::create(log_file_path)?;
         cmd.stdout(Stdio::from(f));

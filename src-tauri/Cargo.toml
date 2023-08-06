@@ -1,5 +1,5 @@
 [package]
-name = "catapult"
+name = "ballista"
 version = "0.2.0"
 description = "A Tauri App"
 authors = ["you"]

@@ -1,6 +1,8 @@
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::fs;
+use std::path::PathBuf;
 use std::process::{Command, exit};
 use std::sync::Arc;
 use anyhow::Error;
@@ -105,7 +107,13 @@ fn main() {
     }
 
     let hd = home::home_dir().expect("unable to find the path to home directory");
-    let cs = ConnectionStore::init(hd);
+    // <= 0.2.0 migrate to a new app specific location
+    let bd = hd.join(".ballista");
+    fs::create_dir(&bd).expect("failed to create a directory for storing Ballista's data");
+    move_file(hd.join("catapult-data.json"), bd.join("ballista-data.json"));
+    move_file(hd.join("catapult-trusted-certs.json"), bd.join("ballista-trusted-certs.json"));
+
+    let cs = ConnectionStore::init(bd);
     if let Err(e) = cs {
         println!("failed to initialize ConnectionStore: {}", e.to_string());
         exit(1);
@@ -125,4 +133,13 @@ fn create_json_resp(code: i32, msg: &str) -> String {
     obj.insert("code".to_string(), serde_json::Value::Number(Number::from(code)));
     obj.insert("msg".to_string(), serde_json::Value::String(String::from(msg)));
     serde_json::to_string(&obj).unwrap()
+}
+
+fn move_file(old: PathBuf, new: PathBuf) {
+    if old.exists() {
+        let r = fs::rename(&old, &new);
+        if let Err(e) = r {
+            println!("failed to move the file from {:?} to {:?} : {}", old, new, e.to_string());
+        }
+    }
 }
