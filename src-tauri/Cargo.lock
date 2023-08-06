@@ -293,7 +293,7 @@ checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
 name = "ballista"
-version = "0.2.0"
+version = "0.3.0-snapshot"
 dependencies = [
  "anyhow",
  "asn1-rs",
@@ -476,29 +476,6 @@ checksum = "599aa35200ffff8f04c1925aa1acc92fa2e08874379ef42e210a80e527e60838"
 dependencies = [
  "serde",
  "toml 0.7.3",
-]
-
-[[package]]
-name = "catapult"
-version = "0.3.0-snapshot"
-dependencies = [
- "anyhow",
- "asn1-rs",
- "fix-path-env",
- "hex",
- "home",
- "openssl",
- "openssl-probe",
- "reqwest",
- "roxmltree",
- "rustc-hash",
- "serde",
- "serde_json",
- "sha2",
- "tauri",
- "tauri-build",
- "uuid",
- "zip",
 ]
 
 [[package]]

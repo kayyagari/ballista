@@ -109,9 +109,11 @@ fn main() {
     let hd = home::home_dir().expect("unable to find the path to home directory");
     // <= 0.2.0 migrate to a new app specific location
     let bd = hd.join(".ballista");
-    fs::create_dir(&bd).expect("failed to create a directory for storing Ballista's data");
-    move_file(hd.join("catapult-data.json"), bd.join("ballista-data.json"));
-    move_file(hd.join("catapult-trusted-certs.json"), bd.join("ballista-trusted-certs.json"));
+    let r = fs::create_dir(&bd);
+    if let Ok(_) = r {
+        move_file(hd.join("catapult-data.json"), bd.join("ballista-data.json"));
+        move_file(hd.join("catapult-trusted-certs.json"), bd.join("ballista-trusted-certs.json"));
+    }
 
     let cs = ConnectionStore::init(bd);
     if let Err(e) = cs {
