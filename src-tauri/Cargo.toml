@@ -1,6 +1,6 @@
 [package]
 name = "ballista"
-version = "0.3.0-snapshot"
+version = "0.3.0"
 description = "A Mirth Connect Admin Client Launcher"
 authors = ["kiran@sereen.io"]
 license = "MPL-2.0"
