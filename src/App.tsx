@@ -80,6 +80,7 @@ function App() {
 
     const [treeData, setTreeData] = useState<DataNode[]>([]);
     const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
+    const [autoExpandParent, setAutoExpandParent] = useState(false);
 
     const [newGroupName, setNewGroupName] = useState("");
     const [groupNames, setGroupNames] = useState([DEFAULT_GROUP_NAME]);
@@ -96,7 +97,10 @@ function App() {
         password: "",
         verify: true,
         group: "Default",
-        notes: ""};
+        notes: "",
+        nodeId: "",
+        parentId: ""
+        };
 
     const [cc, setCc] = useState<Connection>({...emptyConnection});
 
@@ -113,6 +117,7 @@ function App() {
     useEffect(() => {loadConnections().then(d => {
         setData(d);
         createTreeNodes(d);
+        setAutoExpandParent(false);
         if(d.length > 0) {
             setCc(d[0]);
             // also gather the group names for once
@@ -128,7 +133,6 @@ function App() {
         }
     })}, [])
     async function importConnections(e: any) {
-        console.log(e);
         const selected = await open({
             multiple: false,
             filters: [{
@@ -137,9 +141,7 @@ function App() {
             }]
         });
         if (selected !== null) {
-            console.log(selected)
             await invoke("import", {file_path: selected});
-            console.log("after invoking import")
             loadConnections().then(d => {
                 setData(d);
                 createTreeNodes(d);
@@ -184,8 +186,10 @@ function App() {
     }
 
     function createTreeNodes(d: Connection[]) {
+        let tobeExpanded: string[] = [];
         if(d.length == 0) {
-            return;
+            setTreeData([]);
+            return tobeExpanded;
         }
         let orderedConMap = orderConnections(d);
         let nodes: DataNode[] = [];
@@ -193,12 +197,16 @@ function App() {
             let name = orderedConMap.groupNames[i];
             let groupedCons = orderedConMap.groupConnMap[name];
             let conNodes: DataNode[] = [];
-            let parentKey = i.toString();
+            let parentId = i.toString();
+            tobeExpanded.push(parentId + "-0");
             for(let j = 0; j < groupedCons.length; j++) {
                 let c = groupedCons[j];
+                c.parentId = parentId;
+                let nodeId = parentId + "-" + j.toString();
+                c.nodeId = nodeId;
                 let node = {
                   title: c.name,
-                  key: parentKey + "-" + j.toString(),
+                  key: nodeId,
                   con: c,
                   icon: <CarryOutOutlined />
                 };
@@ -207,18 +215,17 @@ function App() {
 
             let groupNode = {
                 title: name,
-                key: parentKey,
+                key: parentId,
                 icon: <CarryOutOutlined />,
                 children: conNodes
             };
             nodes.push(groupNode);
         }
         setTreeData(nodes);
-        setExpandedKeys(["0-0"]);
+        return tobeExpanded;
     }
 
     const handleMenuClick = ({ key, domEvent }: any) => {
-        console.log(key);
         if (key == 'import') {
             importConnections(domEvent);
         }
@@ -308,6 +315,7 @@ function App() {
                     return c.id !== cc.id;
                 });
                 setData(tmp);
+                //searchConnections();
                 if(pos != -1) {
                     if(pos == tmp.length) {
                         pos--;
@@ -340,26 +348,7 @@ function App() {
 
     function selectConnection(index: number) {
         setCc(data[index]);
-        console.log("selected connection " + index);
     }
-
-    const getParentKey = (key: React.Key, tree: DataNode[]): React.Key => {
-        let parentKey: React.Key;
-        for (let i = 0; i < tree.length; i++) {
-            const node = tree[i];
-            if (node.children) {
-                if (node.children.some((item) => item.key === key)) {
-                    parentKey = node.key;
-                } else {
-                    let tmp = getParentKey(key, node.children);
-                    if(tmp) {
-                        parentKey = tmp;
-                    }
-                }
-            }
-        }
-        return parentKey!;
-    };
 
     const onTreeNodeSelect = (selectedKeys: React.Key[], info: any) => {
         if(info.node.con) {
@@ -372,14 +361,23 @@ function App() {
         value = value.trim();
         if(value.length == 0) {
             createTreeNodes(data);
+            setExpandedKeys([]);
+            setAutoExpandParent(false);
             return;
         }
         if(value.length < 2) {
             return;
         }
         let filteredCons = data.filter((c) => searchText(value, c));
-        createTreeNodes(filteredCons);
-        setExpandedKeys(["0-0"])
+        let tobeExpanded: string[] = createTreeNodes(filteredCons);
+        if(tobeExpanded.length > 0) {
+            setExpandedKeys(tobeExpanded as React.Key[]);
+            setAutoExpandParent(true);
+        }
+        else {
+            setExpandedKeys([]);
+            setAutoExpandParent(false);
+        }
     };
 
     const updateNewGroupName = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -408,6 +406,11 @@ function App() {
         }, 0);
     };
 
+    const onExpand = (newExpandedKeys: React.Key[]) => {
+        setExpandedKeys(newExpandedKeys);
+        setAutoExpandParent(false);
+    };
+
     return (
         <Context.Provider value={{name: ""}}>
         {contextHolder}
@@ -418,7 +421,9 @@ function App() {
                     <Search style={{ marginBottom: 8 }} placeholder="Search" onChange={searchConnections} />
                     <Tree
                         showLine={true}
-                        defaultExpandedKeys={expandedKeys}
+                        onExpand={onExpand}
+                        expandedKeys={expandedKeys}
+                        autoExpandParent={autoExpandParent}
                         onSelect={onTreeNodeSelect}
                         treeData={treeData}
                     />

@@ -13,7 +13,11 @@ export interface Connection {
     password: string,
     verify: boolean,
     group: string,
-    notes: string
+    notes: string,
+
+    // the below properties are transient and are used only in the UI
+    nodeId: string,
+    parentId: string,
 }
 
 export async function loadConnections() {
