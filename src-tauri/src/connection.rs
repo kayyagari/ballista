@@ -3,13 +3,13 @@ use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::ops::Deref;
 use std::path::PathBuf;
-use std::process::{Command, ExitStatus};
+use std::process::{Command};
 use std::sync::{Arc, Mutex};
 use anyhow::Error;
 use serde::{Deserialize, Serialize};
 use home::env::Env;
 use home::env::OS_ENV;
-use openssl::x509::store::{X509Store, X509StoreBuilder, X509StoreRef};
+use openssl::x509::store::{X509Store, X509StoreBuilder};
 use openssl::x509::X509;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
@@ -55,7 +55,7 @@ impl ConnectionStore {
     pub fn init(data_dir_path: PathBuf) -> Result<Self, Error> {
         let con_location = data_dir_path.join("ballista-data.json");
         let mut con_location_file = File::open(&con_location);
-        if let Err(e) = con_location_file {
+        if let Err(_e) = con_location_file {
             con_location_file = File::create(&con_location);
         }
         let con_location_file = con_location_file?;
@@ -195,7 +195,7 @@ impl ConnectionStore {
     fn write_connections_to_disk(&self) -> Result<(), Error> {
         let c = self.cache.lock().unwrap();
         let val = serde_json::to_string_pretty(c.deref())?;
-        let mut f = OpenOptions::new().append(false).create(true).write(true).truncate(true).open(&self.con_location);
+        let f = OpenOptions::new().append(false).create(true).write(true).truncate(true).open(&self.con_location);
         if let Err(e) = f {
             println!("unable to open file for writing: {}", e.to_string());
             return Err(Error::new(e));
@@ -226,7 +226,7 @@ pub fn find_java_home() -> String {
 
 fn parse_trusted_certs(trusted_certs_location: &PathBuf) -> FxHashMap<String, X509> {
     let mut certs = FxHashMap::default();
-    let mut trusted_certs_location_file = File::open(trusted_certs_location);
+    let trusted_certs_location_file = File::open(trusted_certs_location);
     if let Ok(trusted_certs_location_file) = trusted_certs_location_file {
         let cert_map : serde_json::Result<FxHashMap<String, String>> = serde_json::from_reader(trusted_certs_location_file);
         if let Ok(cert_map) = cert_map {

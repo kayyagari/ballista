@@ -1,5 +1,5 @@
 use std::fs::File;
-use std::{env, os};
+use std::{env};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
@@ -12,7 +12,7 @@ use roxmltree::Node;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 
-use crate::connection::{ConnectionEntry, ConnectionStore};
+use crate::connection::{ConnectionEntry};
 use crate::errors::VerificationError;
 use crate::verify::verify_jar;
 

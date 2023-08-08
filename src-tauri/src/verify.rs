@@ -1,16 +1,16 @@
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, read_to_string};
+use std::io::{Read, read_to_string};
 use std::iter::Peekable;
-use std::path::PathBuf;
+
 use std::str::Chars;
-use asn1_rs::{Any, DerSequence, FromDer, Sequence, Set, Tag};
+use asn1_rs::{Any, DerSequence, FromDer, Sequence, Set};
 use openssl::cms::CMSOptions;
-use openssl::md::{Md, MdRef};
-use openssl::stack::Stack;
-use openssl::x509::store::{X509Store, X509StoreBuilder, X509StoreRef};
+use openssl::md::{MdRef};
+
+use openssl::x509::store::{X509StoreRef};
 use rustc_hash::FxHashMap;
 use openssl::x509::X509;
-use sha2::Sha256;
+
 use zip::read::ZipFile;
 use crate::errors::VerificationError;
 
@@ -165,15 +165,6 @@ impl Manifest {
     }
 }
 
-pub fn parse_cert<R>(mut r: R) -> Result<X509, anyhow::Error>
-    where R: Read
-{
-    let mut buf = Vec::with_capacity(512);
-    let r = r.read_to_end(&mut buf)?;
-    let cert = X509::from_der(buf.as_slice())?;
-    Ok(cert)
-}
-
 pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), VerificationError> {
     let f = File::open(file_path)?;
     let mut za = zip::ZipArchive::new(f)?;
@@ -224,7 +215,7 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
             }
         }
 
-        if let Some((sig_alg_name, sigblock)) = sigblock {
+        if let Some((_sig_alg_name, sigblock)) = sigblock {
             let sigmanifest_buf;
             {
                 let mut sigmanifest_entry = za.by_name(&sf_name)?;
@@ -284,10 +275,10 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
             // #3 Read each file in the JAR file that has an entry in the .SF file. While reading, compute the file's digest and
             // compare the result with the digest for this file in the manifest section. The digests should be the same or verification fails.
             let mut buf: Vec<u8> = Vec::with_capacity(512);
-            for (jar_entry_name, (jar_entry_digest_alg, jar_entry_digest)) in &sigmanifest.name_digests {
+            for (jar_entry_name, (jar_entry_digest_alg, _jar_entry_digest)) in &sigmanifest.name_digests {
                 let mut ctx = openssl::md_ctx::MdCtx::new().unwrap();
                 ctx.digest_init(digest_ref)?;
-                let mut f = za.by_name(jar_entry_name);
+                let f = za.by_name(jar_entry_name);
                 if let Err(ref e) = f {
                     println!("entry {} not found in {} {}", jar_entry_name, file_path, e.to_string());
                     continue;
@@ -302,7 +293,7 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
                 ctx.digest_final(&mut computed_digest_output)?;
 
                 let computed_digest = openssl::base64::encode_block(&computed_digest_output);
-                let (m_alg, m_digest) = manifest.name_digests.get(jar_entry_name).expect("missing MANIFEST entry"); // safe to unwrap
+                let (_m_alg, m_digest) = manifest.name_digests.get(jar_entry_name).expect("missing MANIFEST entry"); // safe to unwrap
                 //println!("comparing digests [{} === {}] for {}", m_digest, computed_digest, jar_entry_name);
                 if m_digest != &computed_digest {
                     let msg = format!("{} digest mismatch(manifest={} != computed={}) for {} in {}", jar_entry_digest_alg, m_digest, computed_digest, jar_entry_name, file_path);

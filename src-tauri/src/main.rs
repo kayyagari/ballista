@@ -3,10 +3,10 @@
 
 use std::fs;
 use std::path::PathBuf;
-use std::process::{Command, exit};
+use std::process::{exit};
 use std::sync::Arc;
-use anyhow::Error;
-use home::env::Env;
+
+
 use serde_json::Number;
 use tauri::State;
 
@@ -102,7 +102,7 @@ fn trust_cert(cert: &str, cs: State<ConnectionStore>) -> String {
 
 fn main() {
     let env_fix = fix_path_env::fix_vars(&["JAVA_HOME", "PATH"]);
-    if let Err(e) = env_fix {
+    if let Err(_e) = env_fix {
         println!("failed to read JAVA_HOME and PATH environment variables");
     }
 
