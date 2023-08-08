@@ -81,6 +81,8 @@ function App() {
     const [treeData, setTreeData] = useState<DataNode[]>([]);
     const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([]);
     const [autoExpandParent, setAutoExpandParent] = useState(false);
+    const [searchVal, setSearchVal] = useState("");
+    const [selectedTreeNodeKey, setSelectedTreeNodeKey] = useState<React.Key[]>([]);
 
     const [newGroupName, setNewGroupName] = useState("");
     const [groupNames, setGroupNames] = useState([DEFAULT_GROUP_NAME]);
@@ -117,9 +119,7 @@ function App() {
     useEffect(() => {loadConnections().then(d => {
         setData(d);
         createTreeNodes(d);
-        setAutoExpandParent(false);
         if(d.length > 0) {
-            setCc(d[0]);
             // also gather the group names for once
             let titles = new Array();
             for(let i = 0; i < d.length; i++) {
@@ -145,11 +145,6 @@ function App() {
             loadConnections().then(d => {
                 setData(d);
                 createTreeNodes(d);
-                for(let i =0; i < d.length; i++) {
-                    if(cc.id == d[i].id) {
-                        setCc(d[i]);
-                    }
-                }
             })
         }
     }
@@ -182,6 +177,7 @@ function App() {
     }
     function createNew() {
         setCc({...emptyConnection})
+        setSelectedTreeNodeKey([]);
         setDirty(false);
     }
 
@@ -222,6 +218,17 @@ function App() {
             nodes.push(groupNode);
         }
         setTreeData(nodes);
+        if(nodes.length > 0) {
+            let firstParent = nodes[0];
+            if(firstParent.children && firstParent.children.length > 0) {
+                let child = firstParent.children[0];
+                let selectedKeys = [child.key];
+                setSelectedTreeNodeKey(selectedKeys);
+                setExpandedKeys(selectedKeys);
+                setAutoExpandParent(true);
+                onTreeNodeSelect(selectedKeys, {node: child});
+            }
+        }
         return tobeExpanded;
     }
 
@@ -315,13 +322,9 @@ function App() {
                     return c.id !== cc.id;
                 });
                 setData(tmp);
-                //searchConnections();
-                if(pos != -1) {
-                    if(pos == tmp.length) {
-                        pos--;
-                    }
-                    setCc(tmp[pos])
-                }
+                // it is easier to search again rather than updating the tree
+                // this is clearly inefficient and needs to be fixed
+                searchConnections(searchVal, tmp);
             }
         }
     }
@@ -334,41 +337,46 @@ function App() {
         let saveResult: string = await invoke("save", {ce: JSON.stringify(cc)});
         try {
             let savedCon = JSON.parse(saveResult);
-            setCc({...savedCon});
             setDirty(false);
-            let tmp = data.filter(c => c.id !== savedCon.id);;
+            let tmp = data.filter(c => c.id !== savedCon.id);
             tmp.push(savedCon);
             setData(tmp);
             createTreeNodes(tmp);
+            let selectedKey = [savedCon.nodeId];
+            setSelectedTreeNodeKey(selectedKey);
+            setExpandedKeys(selectedKey);
+            setAutoExpandParent(true);
+            setCc({...savedCon});
         }
         catch(e) {
             //TODO handle it
         }
     }
 
-    function selectConnection(index: number) {
-        setCc(data[index]);
-    }
-
     const onTreeNodeSelect = (selectedKeys: React.Key[], info: any) => {
+        setSelectedTreeNodeKey(selectedKeys);
         if(info.node.con) {
             setCc(info.node.con);
         }
     };
 
-    const searchConnections = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const setValAndSearch = (e: React.ChangeEvent<HTMLInputElement>) => {
         let {value} = e.target;
         value = value.trim();
+        setSearchVal(value);
+        searchConnections(value, data);
+    }
+
+    const searchConnections = (value: string, connections: Connection[]) => {
+        console.log("search value " + searchVal);
         if(value.length == 0) {
-            createTreeNodes(data);
-            setExpandedKeys([]);
-            setAutoExpandParent(false);
+            createTreeNodes(connections);
             return;
         }
         if(value.length < 2) {
             return;
         }
-        let filteredCons = data.filter((c) => searchText(value, c));
+        let filteredCons = connections.filter((c) => searchText(value, c));
         let tobeExpanded: string[] = createTreeNodes(filteredCons);
         if(tobeExpanded.length > 0) {
             setExpandedKeys(tobeExpanded as React.Key[]);
@@ -418,13 +426,14 @@ function App() {
         <Layout className='layout' style={{ height: '97vh' }}>
             <Sider width={'30%'} style={{ height: '470' }} theme={"light"} >
                 <div style={{overflow: 'auto', height: '90%'}}>
-                    <Search style={{ marginBottom: 8 }} placeholder="Search" onChange={searchConnections} />
+                    <Search style={{ marginBottom: 8 }} placeholder="Search" value={searchVal} onChange={setValAndSearch} />
                     <Tree
                         showLine={true}
                         onExpand={onExpand}
                         expandedKeys={expandedKeys}
                         autoExpandParent={autoExpandParent}
                         onSelect={onTreeNodeSelect}
+                        selectedKeys={selectedTreeNodeKey}
                         treeData={treeData}
                     />
                 </div>
