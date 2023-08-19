@@ -8,6 +8,7 @@ use std::time::{SystemTime};
 use anyhow::Error;
 use openssl::x509::store::X509StoreRef;
 use reqwest::blocking::{Client, ClientBuilder};
+use reqwest::Url;
 use roxmltree::Node;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
@@ -64,7 +65,8 @@ impl WebStartCache {
 
 impl WebstartFile {
     pub fn load(base_url: &str) -> Result<WebstartFile, Error> {
-        let webstart = format!("{}/webstart.jnlp", base_url);
+        let base_url = normalize_url(base_url)?;
+        let webstart = format!("{}/webstart.jnlp", base_url); // base_url will never contain a / at the end after normalization
         let cb = ClientBuilder::default().danger_accept_invalid_certs(true);
         let client = cb.build()?;
 
@@ -75,8 +77,8 @@ impl WebstartFile {
         let doc = roxmltree::Document::parse(&data)?;
 
         let root = doc.root();
-        let main_class_node = get_node(&root, "application-desc").expect("Got something from MC that was not an application-desc node in a JNLP XML");
-        let main_class = main_class_node.attribute("main-class").expect("missing main-class attribute").to_string();
+        let main_class_node = get_node(&root, "application-desc").ok_or(Error::msg("Got something from MC that was not an application-desc node in a JNLP XML"))?;
+        let main_class = main_class_node.attribute("main-class").ok_or(Error::msg("missing main-class attribute"))?.to_string();
         let args = get_client_args(&main_class_node);
 
         let resources_node = get_node(&root, "resources");
@@ -96,7 +98,7 @@ impl WebstartFile {
         let mut j2ses = None;
         if let Some(resources_node) = resources_node {
             j2ses = get_j2ses(&resources_node);
-            download_jars(&resources_node, &client, dir_path, base_url)?;
+            download_jars(&resources_node, &client, dir_path, &base_url)?;
         }
 
         let loaded_at = SystemTime::now();
@@ -291,13 +293,45 @@ fn get_node<'a>(root: &'a Node, tag_name: &str) -> Option<Node<'a, 'a>> {
     })
 }
 
+fn normalize_url(u: &str) -> Result<String, Error> {
+    let parsed_url = Url::parse(u)?;
+    let mut reconstructed_url = String::with_capacity(u.len());
+    reconstructed_url.push_str(parsed_url.scheme());
+    reconstructed_url.push_str("://");
+    reconstructed_url.push_str(parsed_url.host_str().map_or("", |h| h));
+    let port = parsed_url.port().map_or("".to_string(), |p| format!(":{}", p));
+    reconstructed_url.push_str(&port);
+    reconstructed_url.push('/');
+    let mut path_parts = parsed_url.path().split_terminator("/");
+    for pp in path_parts {
+        if !pp.is_empty() {
+            reconstructed_url.push_str(pp);
+            reconstructed_url.push('/');
+        }
+    }
+
+    reconstructed_url.pop(); // remove the trailing /
+    Ok(reconstructed_url)
+}
+
 #[cfg(test)]
 mod tests {
-    use crate::webstart::WebstartFile;
+    use anyhow::Error;
+    use crate::webstart::normalize_url;
 
     #[test]
-    pub fn test_load() {
-        let ws = WebstartFile::load("https://localhost:8443").unwrap();
-        println!("{:?}", ws);
+    pub fn test_normalize_url() -> Result<(), Error> {
+        let candidates = [
+            ("https://localhost:8443", "https://localhost:8443"),
+            ("https://localhost:8443/", "https://localhost:8443"),
+            ("https://localhost:8443//", "https://localhost:8443"),
+            ("https://localhost:8443//a///bv", "https://localhost:8443/a/bv")
+        ];
+
+        for (src, expected) in candidates {
+            let actual = normalize_url(src)?;
+            assert_eq!(expected, &actual);
+        }
+        Ok(())
     }
 }
