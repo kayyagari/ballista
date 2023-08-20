@@ -67,7 +67,12 @@ impl WebstartFile {
     pub fn load(base_url: &str) -> Result<WebstartFile, Error> {
         let base_url = normalize_url(base_url)?;
         let webstart = format!("{}/webstart.jnlp", base_url); // base_url will never contain a / at the end after normalization
-        let cb = ClientBuilder::default().danger_accept_invalid_certs(true);
+        let cb = ClientBuilder::default()
+            // in certain network environments client is failing with error message "connection closed before message completed"
+            // disabling the pooling resolved the issue
+            .pool_max_idle_per_host(0)
+            // accept any cert presented by the MC server
+            .danger_accept_invalid_certs(true);
         let client = cb.build()?;
 
         let r = client.get(&webstart).send()?;
