@@ -1,6 +1,7 @@
 import React, {useEffect, useRef, useState} from "react";
 import { invoke } from "@tauri-apps/api/tauri";
 import { open, confirm } from '@tauri-apps/api/dialog';
+import { appWindow } from "@tauri-apps/api/window";
 import "./App.css";
 import './CertDialog'
 import {
@@ -16,7 +17,7 @@ import {
     Row,
     theme,
     Modal,
-    Checkbox, Spin, notification, Tree, Select, Space, InputRef
+    Checkbox, Spin, notification, Tree, Select, Space, InputRef, ConfigProvider
 } from "antd";
 import type { DataNode } from 'antd/es/tree';
 import {
@@ -68,6 +69,14 @@ function App() {
     const {
         token: { colorBgContainer },
     } = theme.useToken();
+
+    const { defaultAlgorithm, darkAlgorithm } = theme;
+    const [isDarkMode, setIsDarkMode] = useState(false);
+    appWindow.theme().then(t => setIsDarkMode(t == 'dark'));
+    appWindow.onThemeChanged(({ payload: theme }) => {
+        setIsDarkMode(theme == 'dark');
+    });
+
     const [api, contextHolder] = notification.useNotification();
     const openNotification = (placement: NotificationPlacement, msg: string) => {
         api.info({
@@ -421,117 +430,119 @@ function App() {
 
     return (
         <Context.Provider value={{name: ""}}>
-        {contextHolder}
-        <Spin spinning={loading}>
-        <Layout className='layout' style={{ height: '97vh' }}>
-            <Sider width={'30%'} style={{ height: '470' }} theme={"light"} >
-                <div style={{overflow: 'auto', height: '90%'}}>
-                    <Search style={{ marginBottom: 8 }} placeholder="Search" value={searchVal} onChange={setValAndSearch} />
-                    <Tree
-                        showLine={true}
-                        onExpand={onExpand}
-                        expandedKeys={expandedKeys}
-                        autoExpandParent={autoExpandParent}
-                        onSelect={onTreeNodeSelect}
-                        selectedKeys={selectedTreeNodeKey}
-                        treeData={treeData}
-                    />
-                </div>
-                <Row align={'middle'} style={{height: '5'}} gutter={[24, 3]}>
-                    <Col>
-                        <Menu theme="light" mode="horizontal" triggerSubMenuAction="click" items={items} onClick={handleMenuClick} />
-                    </Col>
-                    <Col span={10} />
-                    <Col><Button onClick={createNew} >+</Button></Col>
-                </Row>
-            </Sider>
-            <Layout className="site-layout">
-                {/* <Header style={{ padding: 0, background: 'rgba(255, 255, 255, 0.2)' }} /> */}
-                <Content style={{ marginLeft: '4px' }} >
-                    <div style={{ padding: 1, textAlign: 'center', background: colorBgContainer, width: '100%' }}>
-                        <Row align={'middle'} gutter={[24, 3]} style={{ marginBottom: 50, marginTop: 10 }}>
-                            <Col span={4}>Name:</Col>
-                            <Col span={16}>
-                                <Input placeholder={"Connection's name e.g Acme Test Instance"} size={"middle"} bordered value={cc.name} onChange={updateName} autoFocus={true}/>
-                            </Col>
-                        </Row>
-                        <Row align={"middle"} gutter={[24, 3]} style={{ marginBottom: 8 }}>
-                            <Col span={4} style={{ textAlign: "center" }}>URL:</Col>
-                            <Col span={16}>
-                                <Input placeholder="MC URL e.g https://localhost:8443" size={"middle"} bordered value={cc.address} onChange={updateUrl} onPressEnter={launch} />
-                            </Col>
-                            <Col><Button type={"primary"} onClick={launch} disabled={cc.id == "" || cc.address == "" || dirty} >Open</Button></Col>
-                        </Row>
-                        <Row align={'middle'} gutter={[24, 3]} style={{ marginBottom: 8 }}>
-                            <Col span={4}>Username:</Col>
-                            <Col span={12}>
-                                <Input placeholder={"Username e.g admin"} size={"middle"} bordered value={cc.username} onChange={updateUsername} />
-                            </Col>
-                        </Row>
-                        <Row align={'middle'} gutter={[24, 3]} style={{ marginBottom: 8 }}>
-                            <Col span={4}>Password:</Col>
-                            <Col span={12}>
-                                <Input.Password placeholder={"Password. Skip, if sensitive"} size={"middle"} value={cc.password}
-                                    iconRender={(visible) => (visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />)}
-                                    onChange={updatePassword} />
-                            </Col>
-                        </Row>
-                        <Row align={'middle'} gutter={[24, 3]}>
-                            <Col span={4}>Java Home:</Col>
-                            <Col span={12}>
-                                <Input placeholder={"Path to Java Home Directory"} size={"middle"} bordered value={cc.javaHome} onChange={updateJavaHome} />
-                            </Col>
-                        </Row>
-                        <Row align={'middle'} gutter={[24, 3]}>
-                            <Col span={4}>Max Memory:</Col>
-                            <Col span={12}>
-                                <Input placeholder={"e.g. 512m or 2g "} size={"middle"} bordered value={cc.heapSize} onChange={updateHeapSize} />
-                            </Col>
-                            <Col>
-                                <Checkbox checked={cc.verify} onChange={updateVerify}>Verify JAR files</Checkbox>
-                            </Col>
-                        </Row>
-                        <Row align={'middle'} gutter={[24, 3]}>
-                            <Col span={4}>Group:</Col>
-                            <Col span={12}>
-                                <Select
-                                    style={{ width: 300 }}
-                                    placeholder="Name of the connection's group"
-                                    value={cc.group}
-                                    onChange={updateGroup}
-                                    dropdownRender={(menu) => (
-                                        <>
-                                            {menu}
-                                            <Divider style={{ margin: '8px 0' }} />
-                                            <Space style={{ padding: '0 8px 4px' }}>
-                                                <Input
-                                                    placeholder="New group name"
-                                                    ref={groupInputRef}
-                                                    value={newGroupName}
-                                                    onChange={updateNewGroupName}
-                                                />
-                                                <Button type="text" icon={<PlusOutlined />} onClick={addNewGroup}/>
-                                            </Space>
-                                        </>
-                                    )}
-                                    options={groupNames.map((name) => ({ label: name, value: name }))}
-                                />
-                            </Col>
-                        </Row>
-                        <Row>
-                            <Col span={20} style={{ marginTop: 20, alignContent: "end" }}>
-                                <Button type={"primary"} disabled={!dirty} onClick={saveConnection}>Save</Button>
-                            </Col>
-                        </Row>
-                        <Row style={{ marginTop: 150 }}>
-                            <Col style={{ alignContent: "end" }}><Button type={"primary"} danger onClick={deleteConnection} disabled={cc.id == ""}>Delete</Button></Col>
-                        </Row>
+          <ConfigProvider theme={{algorithm: isDarkMode? darkAlgorithm : defaultAlgorithm}}>
+            {contextHolder}
+            <Spin spinning={loading}>
+            <Layout className='layout' style={{ height: '97vh' }}>
+                <Sider width={'30%'} style={{ height: '470' }} theme={isDarkMode ? "dark" : "light"}>
+                    <div style={{overflow: 'auto', height: '90%'}}>
+                        <Search style={{ marginBottom: 8 }} placeholder="Search" value={searchVal} onChange={setValAndSearch} />
+                        <Tree
+                            showLine={true}
+                            onExpand={onExpand}
+                            expandedKeys={expandedKeys}
+                            autoExpandParent={autoExpandParent}
+                            onSelect={onTreeNodeSelect}
+                            selectedKeys={selectedTreeNodeKey}
+                            treeData={treeData}
+                        />
                     </div>
-                    <CertDialog trustAndLaunch={trustAndLaunch} abortLaunch={abortLaunch} cert={cert}/>
-                </Content>
+                    <Row align={'middle'} style={{height: '5'}} gutter={[24, 3]}>
+                        <Col>
+                            <Menu theme={isDarkMode ? "dark" : "light"} mode="horizontal" triggerSubMenuAction="click" items={items} onClick={handleMenuClick} />
+                        </Col>
+                        <Col span={10} />
+                        <Col><Button onClick={createNew} >+</Button></Col>
+                    </Row>
+                </Sider>
+                <Layout className="site-layout">
+                    {/* <Header style={{ padding: 0, background: 'rgba(255, 255, 255, 0.2)' }} /> */}
+                    <Content style={{ marginLeft: '4px' }} >
+                        <div style={{ padding: 1, textAlign: 'center', width: '100%' }}>
+                            <Row align={'middle'} gutter={[24, 3]} style={{ marginBottom: 50, marginTop: 10 }}>
+                                <Col span={4}><span>Name:</span></Col>
+                                <Col span={16}>
+                                    <Input placeholder={"Connection's name e.g Acme Test Instance"} size={"middle"} bordered value={cc.name} onChange={updateName} autoFocus={true}/>
+                                </Col>
+                            </Row>
+                            <Row align={"middle"} gutter={[24, 3]} style={{ marginBottom: 8 }}>
+                                <Col span={4} style={{ textAlign: "center" }}>URL:</Col>
+                                <Col span={16}>
+                                    <Input placeholder="MC URL e.g https://localhost:8443" size={"middle"} bordered value={cc.address} onChange={updateUrl} onPressEnter={launch} />
+                                </Col>
+                                <Col><Button type={"primary"} onClick={launch} disabled={cc.id == "" || cc.address == "" || dirty} >Open</Button></Col>
+                            </Row>
+                            <Row align={'middle'} gutter={[24, 3]} style={{ marginBottom: 8 }}>
+                                <Col span={4}>Username:</Col>
+                                <Col span={12}>
+                                    <Input placeholder={"Username e.g admin"} size={"middle"} bordered value={cc.username} onChange={updateUsername} />
+                                </Col>
+                            </Row>
+                            <Row align={'middle'} gutter={[24, 3]} style={{ marginBottom: 8 }}>
+                                <Col span={4}>Password:</Col>
+                                <Col span={12}>
+                                    <Input.Password placeholder={"Password. Skip, if sensitive"} size={"middle"} value={cc.password}
+                                        iconRender={(visible) => (visible ? <EyeTwoTone /> : <EyeInvisibleOutlined />)}
+                                        onChange={updatePassword} />
+                                </Col>
+                            </Row>
+                            <Row align={'middle'} gutter={[24, 3]}>
+                                <Col span={4}>Java Home:</Col>
+                                <Col span={12}>
+                                    <Input placeholder={"Path to Java Home Directory"} size={"middle"} bordered value={cc.javaHome} onChange={updateJavaHome} />
+                                </Col>
+                            </Row>
+                            <Row align={'middle'} gutter={[24, 3]}>
+                                <Col span={4}>Max Memory:</Col>
+                                <Col span={12}>
+                                    <Input placeholder={"e.g. 512m or 2g "} size={"middle"} bordered value={cc.heapSize} onChange={updateHeapSize} />
+                                </Col>
+                                <Col>
+                                    <Checkbox checked={cc.verify} onChange={updateVerify}>Verify JAR files</Checkbox>
+                                </Col>
+                            </Row>
+                            <Row align={'middle'} gutter={[24, 3]}>
+                                <Col span={4}>Group:</Col>
+                                <Col span={12}>
+                                    <Select
+                                        style={{ width: 300 }}
+                                        placeholder="Name of the connection's group"
+                                        value={cc.group}
+                                        onChange={updateGroup}
+                                        dropdownRender={(menu) => (
+                                            <>
+                                                {menu}
+                                                <Divider style={{ margin: '8px 0' }} />
+                                                <Space style={{ padding: '0 8px 4px' }}>
+                                                    <Input
+                                                        placeholder="New group name"
+                                                        ref={groupInputRef}
+                                                        value={newGroupName}
+                                                        onChange={updateNewGroupName}
+                                                    />
+                                                    <Button type="text" icon={<PlusOutlined />} onClick={addNewGroup}/>
+                                                </Space>
+                                            </>
+                                        )}
+                                        options={groupNames.map((name) => ({ label: name, value: name }))}
+                                    />
+                                </Col>
+                            </Row>
+                            <Row>
+                                <Col span={20} style={{ marginTop: 20, alignContent: "end" }}>
+                                    <Button type={"primary"} disabled={!dirty} onClick={saveConnection}>Save</Button>
+                                </Col>
+                            </Row>
+                            <Row style={{ marginTop: 150 }}>
+                                <Col style={{ alignContent: "end" }}><Button type={"primary"} danger onClick={deleteConnection} disabled={cc.id == ""}>Delete</Button></Col>
+                            </Row>
+                        </div>
+                        <CertDialog trustAndLaunch={trustAndLaunch} abortLaunch={abortLaunch} cert={cert}/>
+                    </Content>
+                </Layout>
             </Layout>
-        </Layout>
-        </Spin>
+            </Spin>
+        </ConfigProvider>
         </Context.Provider>
     );
 }
