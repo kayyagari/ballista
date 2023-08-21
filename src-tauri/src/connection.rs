@@ -128,7 +128,7 @@ impl ConnectionStore {
         if let Some(ref password) = ce.password {
             let password = password.trim();
             if password.is_empty() {
-                ce.username = None;
+                ce.password = None;
             }
         }
 
