@@ -8,6 +8,9 @@ A lean and simple launcher for Mirth Connect Admin Client.
 4. Adjust the `Java Home` field's value if necessary (please note that Ballista assumes JRE version 8 or higher was already installed on the local machine)
 4. Click on `Open`
 
+## Known Issues
+Ballista cannot open MC Admin Client for version 3.10.1 due to the bug in MC server https://github.com/nextgenhealthcare/connect/issues/4432. This bug in MC server was fixed in version 3.11.0.
+
 ## Compiling
 
 These compilation instructions are written for users not familiar with Rust and Tauri who just want to build and use Catapault.
