@@ -18,6 +18,15 @@ mod connection;
 mod verify;
 mod errors;
 
+const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
+#[tauri::command]
+async fn get_ballista_info() -> String {
+    let mut obj = serde_json::Map::new();
+    obj.insert("ballista_version".to_string(), serde_json::Value::String(String::from(APP_VERSION)));
+    return serde_json::to_string(&obj).unwrap()
+}
+
 #[tauri::command(rename_all = "snake_case")]
 fn launch(id: &str, cs: State<ConnectionStore>, wc: State<WebStartCache>) -> String {
     let ce = cs.get(id);
@@ -28,7 +37,7 @@ fn launch(id: &str, cs: State<ConnectionStore>, wc: State<WebStartCache>) -> Str
             if let Err(e) = tmp {
                 let msg = e.to_string();
                 println!("{}", msg);
-                return  create_json_resp(-1, &msg);
+                return create_json_resp(-1, &msg);
             }
 
             ws = Some(Arc::new(tmp.unwrap()));
@@ -46,7 +55,7 @@ fn launch(id: &str, cs: State<ConnectionStore>, wc: State<WebStartCache>) -> Str
         if let Err(e) = r {
             let msg = e.to_string();
             println!("{}", msg);
-            return  create_json_resp(-1, &msg);
+            return create_json_resp(-1, &msg);
         }
     }
 
@@ -125,7 +134,7 @@ fn main() {
     tauri::Builder::default()
         .manage(cs.unwrap())
         .manage(wc)
-        .invoke_handler(tauri::generate_handler![launch, import, delete, save, load_connections, trust_cert])
+        .invoke_handler(tauri::generate_handler![launch, import, delete, save, load_connections, trust_cert, get_ballista_info])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
