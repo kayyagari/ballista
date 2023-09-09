@@ -39,6 +39,7 @@ import {
     searchText
 } from './connection';
 import Search from "antd/es/input/Search";
+import {BallistaInfo, requestBallistaInfo} from "./ballistaInfo";
 
 const { Content, Sider } = Layout;
 
@@ -97,6 +98,8 @@ function App() {
     const [groupNames, setGroupNames] = useState([DEFAULT_GROUP_NAME]);
     const groupInputRef = useRef<InputRef>(null); // for the group name selection
 
+    const [ballistaInfo, setBallistaInfo] = useState<BallistaInfo>();
+
     const emptyConnection: Connection = {
         address: "",
         heapSize: "",
@@ -124,6 +127,11 @@ function App() {
         expires_on: undefined
     });
     const [loading, setLoading] = useState(false);
+
+    useEffect(() => {requestBallistaInfo().then(data => {
+        setBallistaInfo(data)
+        appWindow.setTitle(`Ballista - ${data.ballista_version}`)
+    })}, [])
 
     useEffect(() => {loadConnections().then(d => {
         setData(d);
