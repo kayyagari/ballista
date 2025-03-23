@@ -1,28 +1,28 @@
-use std::collections::HashMap;
-use std::fs::{File, OpenOptions};
-use std::io::Write;
-use std::ops::Deref;
-use std::path::PathBuf;
-use std::process::{Command};
-use std::sync::{Arc, Mutex};
 use anyhow::Error;
-use serde::{Deserialize, Serialize};
 use home::env::Env;
 use home::env::OS_ENV;
 use openssl::x509::store::{X509Store, X509StoreBuilder};
 use openssl::x509::X509;
 use rustc_hash::FxHashMap;
+use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+use std::fs::{File, OpenOptions};
+use std::io::Write;
+use std::ops::Deref;
+use std::path::PathBuf;
+use std::process::Command;
+use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ConnectionEntry {
     pub address: String,
-    #[serde(rename="heapSize")]
+    #[serde(rename = "heapSize")]
     pub heap_size: String,
     pub icon: String,
     pub id: String,
-    #[serde(rename="javaHome")]
+    #[serde(rename = "javaHome")]
     pub java_home: String,
     pub name: String,
     pub username: Option<String>,
@@ -32,22 +32,32 @@ pub struct ConnectionEntry {
     #[serde(default = "get_default_group")]
     pub group: String,
     #[serde(default = "get_default_notes")]
-    pub notes: String
+    pub notes: String,
 }
 
 pub struct ConnectionStore {
     cache: Mutex<HashMap<String, Arc<ConnectionEntry>>>,
     con_location: PathBuf,
     cert_store: Mutex<Arc<X509Store>>,
-    trusted_certs_location: PathBuf
+    trusted_certs_location: PathBuf,
 }
 
 impl Default for ConnectionEntry {
     fn default() -> Self {
         let empty_str = String::from("");
-        ConnectionEntry{address: empty_str.clone(), heap_size: String::from("512m"), icon: empty_str.clone(),
-        id: Uuid::new_v4().to_string(), java_home: find_java_home(), name: empty_str.clone(), username: None,
-        password: None, verify: true, group: get_default_group(), notes: get_default_notes()}
+        ConnectionEntry {
+            address: empty_str.clone(),
+            heap_size: String::from("512m"),
+            icon: empty_str.clone(),
+            id: Uuid::new_v4().to_string(),
+            java_home: find_java_home(),
+            name: empty_str.clone(),
+            username: None,
+            password: None,
+            verify: true,
+            group: get_default_group(),
+            notes: get_default_notes(),
+        }
     }
 }
 
@@ -61,13 +71,13 @@ impl ConnectionStore {
         let con_location_file = con_location_file?;
 
         let mut cache = HashMap::new();
-        let data : serde_json::Result<HashMap<String, ConnectionEntry>> = serde_json::from_reader(con_location_file);
+        let data: serde_json::Result<HashMap<String, ConnectionEntry>> =
+            serde_json::from_reader(con_location_file);
         if let Ok(data) = data {
             for (id, ce) in data {
                 cache.insert(id, Arc::new(ce));
             }
-        }
-        else {
+        } else {
             println!("{}", data.err().unwrap().to_string());
         }
 
@@ -79,7 +89,12 @@ impl ConnectionStore {
         // }
         // let trusted_certs_location_file = trusted_certs_location_file?;
 
-        Ok(ConnectionStore{ con_location, cache: Mutex::new(cache), cert_store: Mutex::new(Arc::new(cert_store)), trusted_certs_location })
+        Ok(ConnectionStore {
+            con_location,
+            cache: Mutex::new(cache),
+            cert_store: Mutex::new(Arc::new(cert_store)),
+            trusted_certs_location,
+        })
     }
 
     pub fn to_json_array_string(&self) -> String {
@@ -133,7 +148,10 @@ impl ConnectionStore {
         }
 
         let data = serde_json::to_string(&ce)?;
-        self.cache.lock().unwrap().insert(ce.id.clone(), Arc::new(ce));
+        self.cache
+            .lock()
+            .unwrap()
+            .insert(ce.id.clone(), Arc::new(ce));
         self.write_connections_to_disk()?;
         Ok(data)
     }
@@ -151,7 +169,10 @@ impl ConnectionStore {
         let java_home = find_java_home();
         for mut ce in data {
             ce.java_home = java_home.clone();
-            self.cache.lock().unwrap().insert(ce.id.clone(), Arc::new(ce));
+            self.cache
+                .lock()
+                .unwrap()
+                .insert(ce.id.clone(), Arc::new(ce));
             count = count + 1;
         }
 
@@ -179,7 +200,12 @@ impl ConnectionStore {
             der_certs.insert(key.to_string(), der);
         }
         let val = serde_json::to_string_pretty(&der_certs)?;
-        let mut f = OpenOptions::new().append(false).create(true).write(true).truncate(true).open(&self.trusted_certs_location)?;
+        let mut f = OpenOptions::new()
+            .append(false)
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&self.trusted_certs_location)?;
         f.write_all(val.as_bytes())?;
 
         let new_store = create_cert_store(certs);
@@ -195,7 +221,12 @@ impl ConnectionStore {
     fn write_connections_to_disk(&self) -> Result<(), Error> {
         let c = self.cache.lock().unwrap();
         let val = serde_json::to_string_pretty(c.deref())?;
-        let f = OpenOptions::new().append(false).create(true).write(true).truncate(true).open(&self.con_location);
+        let f = OpenOptions::new()
+            .append(false)
+            .create(true)
+            .write(true)
+            .truncate(true)
+            .open(&self.con_location);
         if let Err(e) = f {
             println!("unable to open file for writing: {}", e.to_string());
             return Err(Error::new(e));
@@ -213,10 +244,13 @@ pub fn find_java_home() -> String {
     }
 
     if java_home.is_empty() {
-        let out = Command::new("/usr/libexec/java_home").args(["-v", "1.8"]).output();
+        let out = Command::new("/usr/libexec/java_home")
+            .args(["-v", "1.8"])
+            .output();
         if let Ok(out) = out {
             if out.status.success() {
-                java_home = String::from_utf8(out.stdout).expect("failed to create UTF-8 string from OsStr");
+                java_home = String::from_utf8(out.stdout)
+                    .expect("failed to create UTF-8 string from OsStr");
                 println!("/usr/libexec/java_home -v 1.8 returned {}", java_home);
             }
         }
@@ -228,7 +262,8 @@ fn parse_trusted_certs(trusted_certs_location: &PathBuf) -> FxHashMap<String, X5
     let mut certs = FxHashMap::default();
     let trusted_certs_location_file = File::open(trusted_certs_location);
     if let Ok(trusted_certs_location_file) = trusted_certs_location_file {
-        let cert_map : serde_json::Result<FxHashMap<String, String>> = serde_json::from_reader(trusted_certs_location_file);
+        let cert_map: serde_json::Result<FxHashMap<String, String>> =
+            serde_json::from_reader(trusted_certs_location_file);
         if let Ok(cert_map) = cert_map {
             for (key, der_data) in cert_map {
                 let der_data = openssl::base64::decode_block(&der_data);
@@ -236,18 +271,27 @@ fn parse_trusted_certs(trusted_certs_location: &PathBuf) -> FxHashMap<String, X5
                     let c = X509::from_der(der_data.as_slice());
                     if let Ok(c) = c {
                         certs.insert(key, c);
+                    } else {
+                        println!(
+                            "failed to parse cert from DER data with key {} {:?}",
+                            key,
+                            c.err()
+                        );
                     }
-                    else {
-                        println!("failed to parse cert from DER data with key {} {:?}", key, c.err());
-                    }
-                }
-                else {
-                    println!("invalid base64 encoded data with key {} {:?}", key, der_data.err());
+                } else {
+                    println!(
+                        "invalid base64 encoded data with key {} {:?}",
+                        key,
+                        der_data.err()
+                    );
                 }
             }
-        }
-        else {
-            println!("failed to parse trusted certificates JSON file {:?} {:?}", trusted_certs_location, cert_map.err());
+        } else {
+            println!(
+                "failed to parse trusted certificates JSON file {:?} {:?}",
+                trusted_certs_location,
+                cert_map.err()
+            );
         }
     }
 
@@ -260,10 +304,15 @@ fn create_cert_store(certs: FxHashMap<String, X509>) -> X509Store {
         println!("probing and setting OpenSSL environment variables");
         openssl_probe::init_ssl_cert_env_vars();
     }
-    let mut cert_store_builder = X509StoreBuilder::new().expect("unable to created X509 store builder");
-    cert_store_builder.set_default_paths().expect("failed to load system default trusted certs");
+    let mut cert_store_builder =
+        X509StoreBuilder::new().expect("unable to created X509 store builder");
+    cert_store_builder
+        .set_default_paths()
+        .expect("failed to load system default trusted certs");
     for (_, c) in certs {
-        cert_store_builder.add_cert(c).expect("failed to add a cert to the in-memory store");
+        cert_store_builder
+            .add_cert(c)
+            .expect("failed to add a cert to the in-memory store");
     }
 
     cert_store_builder.build()

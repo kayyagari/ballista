@@ -1,18 +1,18 @@
 use std::fs::File;
-use std::io::{Read, read_to_string};
+use std::io::{read_to_string, Read};
 use std::iter::Peekable;
 
-use std::str::Chars;
 use asn1_rs::{Any, DerSequence, FromDer, Sequence, Set};
 use openssl::cms::CMSOptions;
-use openssl::md::{MdRef};
+use openssl::md::MdRef;
+use std::str::Chars;
 
-use openssl::x509::store::{X509StoreRef};
-use rustc_hash::FxHashMap;
+use openssl::x509::store::X509StoreRef;
 use openssl::x509::X509;
+use rustc_hash::FxHashMap;
 
-use zip::read::ZipFile;
 use crate::errors::VerificationError;
+use zip::read::ZipFile;
 
 const DIGEST_KEY_SUFFIX: &'static str = "-Digest";
 const DIGEST_MANIFEST_SUFFIX: &'static str = "-Digest-Manifest";
@@ -31,7 +31,7 @@ pub struct Manifest {
 pub struct ContentInfo<'a> {
     content_type: Any<'a>,
     #[tag_explicit(0)]
-    signed_data: SignedData<'a>
+    signed_data: SignedData<'a>,
 }
 
 #[derive(Debug, DerSequence)]
@@ -44,12 +44,13 @@ pub struct SignedData<'a> {
     certificates: Option<Set<'a>>,
     #[tag_implicit(1)]
     #[optional]
-    crls: Option<Set<'a>>
+    crls: Option<Set<'a>>,
 }
 
 impl Manifest {
     pub fn parse<R>(file_name: &str, r: R) -> Result<Self, anyhow::Error>
-    where R : Read
+    where
+        R: Read,
     {
         let data = read_to_string(r)?;
         let mut buf = data.chars().peekable();
@@ -71,7 +72,8 @@ impl Manifest {
 
             let (k, v) = kv.unwrap();
             if k == "Name" {
-                loop { // until XXX-Digest key is found
+                loop {
+                    // until XXX-Digest key is found
                     let next_line = Manifest::read_line(&mut buf);
                     if let None = next_line {
                         break;
@@ -89,8 +91,7 @@ impl Manifest {
                         break;
                     }
                 }
-            }
-            else  {
+            } else {
                 if k.ends_with(DIGEST_MANIFEST_SUFFIX) {
                     digest_alg_name = Some(k.replace(DIGEST_MANIFEST_SUFFIX, ""));
                 }
@@ -98,7 +99,12 @@ impl Manifest {
             }
         }
 
-        Ok(Manifest{file_name: file_name.to_string(), main_attribs, name_digests, digest_alg_name })
+        Ok(Manifest {
+            file_name: file_name.to_string(),
+            main_attribs,
+            name_digests,
+            digest_alg_name,
+        })
     }
 
     fn read_line(buf: &mut Peekable<Chars>) -> Option<String> {
@@ -122,7 +128,7 @@ impl Manifest {
                             buf.next(); // consume the space and continue
                         }
                     }
-                },
+                }
                 '\r' => {
                     let next = buf.peek();
                     if let Some(c) = next {
@@ -138,7 +144,7 @@ impl Manifest {
                             buf.next(); // consume the space and continue
                         }
                     }
-                },
+                }
                 _ => {
                     line.push(char);
                 }
@@ -184,7 +190,9 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
         for name in za.file_names() {
             //println!("{}", name);
             if name.starts_with(META_INF_PREFIX_PATH) && name.ends_with(DOT_SF_SUFFIX) {
-                let sf_block_prefix = name.replace(META_INF_PREFIX_PATH, "").replace(DOT_SF_SUFFIX, "");
+                let sf_block_prefix = name
+                    .replace(META_INF_PREFIX_PATH, "")
+                    .replace(DOT_SF_SUFFIX, "");
                 signatures.push((name.to_string(), sf_block_prefix));
             }
         }
@@ -201,7 +209,10 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
     //println!("{:?}", manifest);
 
     if signatures.is_empty() {
-        return Err(VerificationError{cert: None, msg: format!("{} is not signed", file_path)});
+        return Err(VerificationError {
+            cert: None,
+            msg: format!("{} is not signed", file_path),
+        });
     }
 
     for (sf_name, sb_prefix) in signatures {
@@ -230,33 +241,49 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
             // #1 Verify the signature of the .SF file.
             println!("verifying {} of {}", sf_name, file_path);
             let mut cms_info = openssl::cms::CmsContentInfo::from_der(sigblock)?;
-            let r = cms_info.verify(None, Some(cert_store), Some(sigmanifest_buf.as_slice()), None, CMSOptions::empty());
+            let r = cms_info.verify(
+                None,
+                Some(cert_store),
+                Some(sigmanifest_buf.as_slice()),
+                None,
+                CMSOptions::empty(),
+            );
             if let Err(e) = r {
                 let msg = e.to_string();
-                if !msg.contains("unsupported certificate purpose") { // FIXME find a better way to tell OpenSSL to not check the certificate extensions
+                if !msg.contains("unsupported certificate purpose") {
+                    // FIXME find a better way to tell OpenSSL to not check the certificate extensions
                     if msg.contains("cms_signerinfo_verify_cert") {
-                        return Err(VerificationError{cert, msg});
+                        return Err(VerificationError { cert, msg });
                     }
-                    return Err(VerificationError{cert:None, msg});
+                    return Err(VerificationError { cert: None, msg });
                 }
             }
 
             // #2 Verify the digest listed in each entry in the .SF file with each corresponding section in the manifest.
             if let None = sigmanifest.digest_alg_name {
-                return Err(VerificationError{cert: None, msg: String::from("missing XXX-Digest-Manifest attribute")})
+                return Err(VerificationError {
+                    cert: None,
+                    msg: String::from("missing XXX-Digest-Manifest attribute"),
+                });
             }
 
             let sig_digest_alg_name = sigmanifest.digest_alg_name.unwrap();
             let key = format!("{}{}", sig_digest_alg_name, DIGEST_MANIFEST_SUFFIX);
             let sf_manifest_digest = sigmanifest.main_attribs.get(&key);
             if let None = sf_manifest_digest {
-                return Err(VerificationError{cert: None, msg: format!("attribute {} not found in {}", key, sf_name)});
+                return Err(VerificationError {
+                    cert: None,
+                    msg: format!("attribute {} not found in {}", key, sf_name),
+                });
             }
             let sf_manifest_digest = sf_manifest_digest.unwrap();
 
             let digest_ref = get_digest_ref(&sig_digest_alg_name);
             if let None = digest_ref {
-                return Err(VerificationError{cert: None, msg: format!("unsupported digest algorithm {}", sig_digest_alg_name)});
+                return Err(VerificationError {
+                    cert: None,
+                    msg: format!("unsupported digest algorithm {}", sig_digest_alg_name),
+                });
             }
             let digest_ref = digest_ref.unwrap();
 
@@ -269,23 +296,36 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
             ctx.digest_final(&mut computed_digest_output)?;
             let computed_manifest_digest = openssl::base64::encode_block(&computed_digest_output);
             if &computed_manifest_digest != sf_manifest_digest {
-                return Err(VerificationError{cert: None, msg: format!("mismatch in manifest digests of {}", file_path)});
+                return Err(VerificationError {
+                    cert: None,
+                    msg: format!("mismatch in manifest digests of {}", file_path),
+                });
             }
 
             // #3 Read each file in the JAR file that has an entry in the .SF file. While reading, compute the file's digest and
             // compare the result with the digest for this file in the manifest section. The digests should be the same or verification fails.
             let mut buf: Vec<u8> = Vec::with_capacity(512);
-            for (jar_entry_name, (jar_entry_digest_alg, _jar_entry_digest)) in &sigmanifest.name_digests {
+            for (jar_entry_name, (jar_entry_digest_alg, _jar_entry_digest)) in
+                &sigmanifest.name_digests
+            {
                 let mut ctx = openssl::md_ctx::MdCtx::new().unwrap();
                 ctx.digest_init(digest_ref)?;
                 let f = za.by_name(jar_entry_name);
                 if let Err(ref e) = f {
-                    println!("entry {} not found in {} {}", jar_entry_name, file_path, e.to_string());
+                    println!(
+                        "entry {} not found in {} {}",
+                        jar_entry_name,
+                        file_path,
+                        e.to_string()
+                    );
                     continue;
                 }
                 let mut f = f.unwrap();
                 if f.is_dir() {
-                    println!("entry {} of {} is a directory, skipping digest check", jar_entry_name, file_path);
+                    println!(
+                        "entry {} of {} is a directory, skipping digest check",
+                        jar_entry_name, file_path
+                    );
                     continue;
                 }
                 f.read_to_end(&mut buf)?;
@@ -293,11 +333,17 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
                 ctx.digest_final(&mut computed_digest_output)?;
 
                 let computed_digest = openssl::base64::encode_block(&computed_digest_output);
-                let (_m_alg, m_digest) = manifest.name_digests.get(jar_entry_name).expect("missing MANIFEST entry"); // safe to unwrap
-                //println!("comparing digests [{} === {}] for {}", m_digest, computed_digest, jar_entry_name);
+                let (_m_alg, m_digest) = manifest
+                    .name_digests
+                    .get(jar_entry_name)
+                    .expect("missing MANIFEST entry"); // safe to unwrap
+                                                       //println!("comparing digests [{} === {}] for {}", m_digest, computed_digest, jar_entry_name);
                 if m_digest != &computed_digest {
-                    let msg = format!("{} digest mismatch(manifest={} != computed={}) for {} in {}", jar_entry_digest_alg, m_digest, computed_digest, jar_entry_name, file_path);
-                    return Err(VerificationError{cert: None, msg});
+                    let msg = format!(
+                        "{} digest mismatch(manifest={} != computed={}) for {} in {}",
+                        jar_entry_digest_alg, m_digest, computed_digest, jar_entry_name, file_path
+                    );
+                    return Err(VerificationError { cert: None, msg });
                 }
                 buf.clear();
             }
@@ -313,7 +359,7 @@ fn get_digest_ref(name: &str) -> Option<&MdRef> {
         "SHA-256" => Some(Md::sha256()),
         "SHA-384" => Some(Md::sha384()),
         "SHA-512" => Some(Md::sha512()),
-        _ => None
+        _ => None,
     }
 }
 fn extract_cert(sigblock: &[u8]) -> Result<Option<X509>, anyhow::Error> {
@@ -334,9 +380,9 @@ fn read_file(zf: &mut ZipFile) -> Result<Vec<u8>, anyhow::Error> {
 
 #[cfg(test)]
 mod tests {
-    use std::collections::VecDeque;
     use openssl::ssl::SslFiletype;
     use openssl::x509::store::{HashDir, X509Lookup, X509StoreBuilder};
+    use std::collections::VecDeque;
     // use asn1::{ParseResult, SimpleAsn1Writable, WriteBuf, Writer};
     use super::*;
 
@@ -362,13 +408,28 @@ mod tests {
         }
 
         let mut name_digests = FxHashMap::default();
-        name_digests.insert("META-INF/maven/com.sereen.catapult/catapult-test-jar/pom.xml", ("SHA-256", "hYrjJTvk33E2hMAm3jQFv94npqhurT1xC/89tZnhrpM="));
-        name_digests.insert("log4j.properties", ("SHA-256", "qDNFTmmOPAopORClhI9oAJiLlPQLgoBBmz2MTWVTq34="));
-        name_digests.insert("META-INF/maven/com.sereen.catapult/catapult-test-jar/pom.properties", ("SHA-256", "EuvP5v5Pd2IOFjVJhMixzxIKy2baBE6a+hOWhtAyA/s="));
-        name_digests.insert("com/sereen/catapult/App.class", ("SHA-256", "YD7chnl2dQvq+IPXfOPOw/82gctW0ZDXrqlVTprcPIs="));
+        name_digests.insert(
+            "META-INF/maven/com.sereen.catapult/catapult-test-jar/pom.xml",
+            ("SHA-256", "hYrjJTvk33E2hMAm3jQFv94npqhurT1xC/89tZnhrpM="),
+        );
+        name_digests.insert(
+            "log4j.properties",
+            ("SHA-256", "qDNFTmmOPAopORClhI9oAJiLlPQLgoBBmz2MTWVTq34="),
+        );
+        name_digests.insert(
+            "META-INF/maven/com.sereen.catapult/catapult-test-jar/pom.properties",
+            ("SHA-256", "EuvP5v5Pd2IOFjVJhMixzxIKy2baBE6a+hOWhtAyA/s="),
+        );
+        name_digests.insert(
+            "com/sereen/catapult/App.class",
+            ("SHA-256", "YD7chnl2dQvq+IPXfOPOw/82gctW0ZDXrqlVTprcPIs="),
+        );
 
         for (k, (alg, digest)) in name_digests {
-            assert_eq!(Some(&(String::from(alg), String::from(digest))), m.name_digests.get(k));
+            assert_eq!(
+                Some(&(String::from(alg), String::from(digest))),
+                m.name_digests.get(k)
+            );
         }
     }
 
@@ -382,8 +443,14 @@ mod tests {
 
         let mut main_attribs = FxHashMap::default();
         main_attribs.insert("Signature-Version", "1.0");
-        main_attribs.insert("SHA-256-Digest-Manifest-Main-Attributes", "SrvXwDOQW2uH7eiPwlfR+ZwyjWW9AbEfM7dU3f4rDKo=");
-        main_attribs.insert("SHA-256-Digest-Manifest", "VncmygtfITJAO9mhhNipU9kWkFhAMqFErwtkfZsGXBc=");
+        main_attribs.insert(
+            "SHA-256-Digest-Manifest-Main-Attributes",
+            "SrvXwDOQW2uH7eiPwlfR+ZwyjWW9AbEfM7dU3f4rDKo=",
+        );
+        main_attribs.insert(
+            "SHA-256-Digest-Manifest",
+            "VncmygtfITJAO9mhhNipU9kWkFhAMqFErwtkfZsGXBc=",
+        );
         main_attribs.insert("Created-By", "1.8.0_352 (Azul Systems, Inc.)");
 
         for (k, v) in main_attribs {
@@ -391,13 +458,28 @@ mod tests {
         }
 
         let mut name_digests = FxHashMap::default();
-        name_digests.insert("META-INF/maven/com.sereen.catapult/catapult-test-jar/pom.xml", ("SHA-256", "GUlGP/Ve5YYCc4jxXqE5XHpWLeLJshKzu2k8m9ulumE="));
-        name_digests.insert("log4j.properties", ("SHA-256", "WZrTZ8yDNvEiIP9ZT1eLvyzRwwvQayYN5m8SY9QKQ4Q="));
-        name_digests.insert("META-INF/maven/com.sereen.catapult/catapult-test-jar/pom.properties", ("SHA-256", "lEBFiKk6dpR0QEag30N+lOIQKOnGT17wKb8e/YNbWv4="));
-        name_digests.insert("com/sereen/catapult/App.class", ("SHA-256", "MGAQ6snGyZKVKzAcSfzmq6+4KnwYK3lXBHl25PRKPMU="));
+        name_digests.insert(
+            "META-INF/maven/com.sereen.catapult/catapult-test-jar/pom.xml",
+            ("SHA-256", "GUlGP/Ve5YYCc4jxXqE5XHpWLeLJshKzu2k8m9ulumE="),
+        );
+        name_digests.insert(
+            "log4j.properties",
+            ("SHA-256", "WZrTZ8yDNvEiIP9ZT1eLvyzRwwvQayYN5m8SY9QKQ4Q="),
+        );
+        name_digests.insert(
+            "META-INF/maven/com.sereen.catapult/catapult-test-jar/pom.properties",
+            ("SHA-256", "lEBFiKk6dpR0QEag30N+lOIQKOnGT17wKb8e/YNbWv4="),
+        );
+        name_digests.insert(
+            "com/sereen/catapult/App.class",
+            ("SHA-256", "MGAQ6snGyZKVKzAcSfzmq6+4KnwYK3lXBHl25PRKPMU="),
+        );
 
         for (k, (alg, digest)) in name_digests {
-            assert_eq!(Some(&(String::from(alg), String::from(digest))), m.name_digests.get(k));
+            assert_eq!(
+                Some(&(String::from(alg), String::from(digest))),
+                m.name_digests.get(k)
+            );
         }
     }
 
@@ -433,7 +515,10 @@ mod tests {
 
     #[test]
     fn test_verify_failures() {
-        let files = ["test-resources/tampered-app-class.jar", "test-resources/tampered-sf.jar"];
+        let files = [
+            "test-resources/tampered-app-class.jar",
+            "test-resources/tampered-sf.jar",
+        ];
         let mut xb = X509StoreBuilder::new().unwrap();
         let store = xb.build();
         for f in files {

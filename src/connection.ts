@@ -1,4 +1,4 @@
-import { invoke } from "@tauri-apps/api/tauri";
+import { invoke } from "@tauri-apps/api/core";
 import {DataNode} from "antd/es/tree";
 
 export const DEFAULT_GROUP_NAME: string = "Default";

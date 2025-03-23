@@ -2,33 +2,27 @@
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
-    "devPath": "http://localhost:1420",
-    "distDir": "../dist",
-    "withGlobalTauri": false
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420"
   },
-  "package": {
-    "productName": "Ballista"
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.icns",
+      "icons/favicon.ico",
+      "icons/icon.png"
+    ]
   },
-  "tauri": {
-    "allowlist": {
-      "all": true,
-      "shell": {
-        "all": false,
-        "open": true
-      },
-      "dialog": {
-        "open": true
-      }
-    },
-    "bundle": {
-      "active": true,
-      "targets": "all",
-      "identifier": "com.sereen.io",
-      "icon": [
-        "icons/32x32.icns",
-        "icons/favicon.ico",
-        "icons/icon.png"
-      ]
+  "productName": "Ballista",
+  "mainBinaryName": "Ballista",
+  "identifier": "com.sereen.io",
+  "plugins": {},
+  "app": {
+    "withGlobalTauri": false,
+    "trayIcon": {
+      "iconPath": "icons/favicon.ico",
+      "title": "Ballista"
     },
     "security": {
       "csp": null
@@ -39,12 +33,9 @@
         "resizable": true,
         "title": "Ballista",
         "width": 900,
-        "height": 600
+        "height": 600,
+        "useHttpsScheme": true
       }
-    ],
-    "systemTray": {
-      "iconPath": "icons/favicon.ico",
-      "title": "Ballista"
-    }
+    ]
   }
 }

@@ -1,7 +1,7 @@
 import React, {useEffect, useRef, useState} from "react";
-import { invoke } from "@tauri-apps/api/tauri";
-import { open, confirm } from '@tauri-apps/api/dialog';
-import { appWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
+import { open, confirm } from '@tauri-apps/plugin-dialog';
+import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow";
 import "./App.css";
 import './CertDialog'
 import {
@@ -40,6 +40,7 @@ import {
 } from './connection';
 import Search from "antd/es/input/Search";
 import {BallistaInfo, requestBallistaInfo} from "./ballistaInfo";
+const appWindow = getCurrentWebviewWindow()
 
 const { Content, Sider } = Layout;
 
@@ -325,7 +326,7 @@ function App() {
         setDirty(true);
     }
     async function deleteConnection() {
-        const confirmed = await confirm('Do you want to delete connection ' + cc.name + '?', { title: '', type: 'warning' });
+        const confirmed = await confirm('Do you want to delete connection ' + cc.name + '?', { title: '', kind: 'warning' });
         if(confirmed) {
             const resp = await invoke("delete", {id: cc.id});
             if(resp == "success") {

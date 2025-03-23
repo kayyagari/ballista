@@ -1,9 +1,9 @@
+use std::env;
 use std::fs::File;
-use std::{env};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
-use std::time::{SystemTime};
+use std::time::SystemTime;
 
 use anyhow::Error;
 use openssl::x509::store::X509StoreRef;
@@ -13,7 +13,7 @@ use roxmltree::Node;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
 
-use crate::connection::{ConnectionEntry};
+use crate::connection::ConnectionEntry;
 use crate::errors::VerificationError;
 use crate::verify::verify_jar;
 
@@ -25,24 +25,24 @@ pub struct WebstartFile {
     j2ses: Option<Vec<J2se>>,
     //jars: Vec<Jar>,
     tmp_dir: PathBuf,
-    loaded_at: SystemTime
+    loaded_at: SystemTime,
 }
 
 /// from jnlp -> resources -> j2se
 #[derive(Debug)]
 pub struct J2se {
     java_vm_args: Option<String>,
-    version: String
+    version: String,
 }
 
 pub struct WebStartCache {
-    cache: Mutex<FxHashMap<String, Arc<WebstartFile>>>
+    cache: Mutex<FxHashMap<String, Arc<WebstartFile>>>,
 }
 
 impl WebStartCache {
     pub fn init() -> Self {
         let cache = Mutex::new(FxHashMap::default());
-        WebStartCache{cache}
+        WebStartCache { cache }
     }
 
     pub fn put(&mut self, wf: Arc<WebstartFile>) {
@@ -54,7 +54,9 @@ impl WebStartCache {
         let wf = cache.get(url);
         if let Some(wf) = wf {
             let now = SystemTime::now();
-            let elapsed = now.duration_since(wf.loaded_at).expect("failed to calculate the duration");
+            let elapsed = now
+                .duration_since(wf.loaded_at)
+                .expect("failed to calculate the duration");
             if elapsed.as_secs() < 120 {
                 return Some(Arc::clone(wf));
             }
@@ -82,8 +84,13 @@ impl WebstartFile {
         let doc = roxmltree::Document::parse(&data)?;
 
         let root = doc.root();
-        let main_class_node = get_node(&root, "application-desc").ok_or(Error::msg("Got something from MC that was not an application-desc node in a JNLP XML"))?;
-        let main_class = main_class_node.attribute("main-class").ok_or(Error::msg("missing main-class attribute"))?.to_string();
+        let main_class_node = get_node(&root, "application-desc").ok_or(Error::msg(
+            "Got something from MC that was not an application-desc node in a JNLP XML",
+        ))?;
+        let main_class = main_class_node
+            .attribute("main-class")
+            .ok_or(Error::msg("missing main-class attribute"))?
+            .to_string();
         let args = get_client_args(&main_class_node);
 
         let resources_node = get_node(&root, "resources");
@@ -107,7 +114,14 @@ impl WebstartFile {
         }
 
         let loaded_at = SystemTime::now();
-        let ws = WebstartFile{url: base_url.to_string(), main_class, tmp_dir, args, loaded_at, j2ses};
+        let ws = WebstartFile {
+            url: base_url.to_string(),
+            main_class,
+            tmp_dir,
+            args,
+            loaded_at,
+            j2ses,
+        };
 
         Ok(ws)
     }
@@ -127,7 +141,7 @@ impl WebstartFile {
             let file_path = file_path.to_str().unwrap();
 
             //In Windows the CP separator is ';' and literally every other OS is ':'
-            let classpath_separator = if cfg!(windows) {';'} else  {':' };
+            let classpath_separator = if cfg!(windows) { ';' } else { ':' };
 
             //println!("{}", file_path);
             // MirthConnect's own jars contain some overridden classes
@@ -137,8 +151,7 @@ impl WebstartFile {
             if file_name.to_str().unwrap().starts_with("mirth") {
                 classpath.push_str(file_path);
                 classpath.push(classpath_separator);
-            }
-            else {
+            } else {
                 classpath_suffix.push_str(file_path);
                 classpath_suffix.push(classpath_separator);
             }
@@ -151,8 +164,7 @@ impl WebstartFile {
         let java_home = ce.java_home.trim();
         if java_home.is_empty() {
             cmd = Command::new("java")
-        }
-        else {
+        } else {
             cmd = Command::new(format!("{}/bin/java", java_home));
         }
 
@@ -178,9 +190,9 @@ impl WebstartFile {
         }
 
         cmd.arg("-cp")
-        .arg(classpath)
-        .arg(&self.main_class)
-        .args(&self.args);
+            .arg(classpath)
+            .arg(&self.main_class)
+            .args(&self.args);
 
         if let Some(ref username) = ce.username {
             cmd.arg(username);
@@ -201,7 +213,10 @@ impl WebstartFile {
 
     pub fn verify(&self, cert_store: &X509StoreRef) -> Result<(), VerificationError> {
         let mut jar_files = Vec::with_capacity(128);
-        let itr = self.tmp_dir.read_dir().expect("failed to read the jar files directory");
+        let itr = self
+            .tmp_dir
+            .read_dir()
+            .expect("failed to read the jar files directory");
         for e in itr {
             let e = e.expect("failed to list a directory entry");
             let file_path = e.path();
@@ -220,7 +235,12 @@ impl WebstartFile {
     }
 }
 
-fn download_jars(resources_node: &Node, client: &Client, dir_path: &Path, base_url: &str) -> Result<(), Error> {
+fn download_jars(
+    resources_node: &Node,
+    client: &Client,
+    dir_path: &Path,
+    base_url: &str,
+) -> Result<(), Error> {
     for n in resources_node.children() {
         let jar = n.has_tag_name("jar");
         let extension = n.has_tag_name("extension");
@@ -237,8 +257,7 @@ fn download_jars(resources_node: &Node, client: &Client, dir_path: &Path, base_u
             let mut resp = client.get(url).send()?;
             let mut f = File::create(dir_path.join(file_name))?;
             resp.copy_to(&mut f)?;
-        }
-        else if extension {
+        } else if extension {
             let r = client.get(url).send()?;
             let data = r.text()?;
             let doc = roxmltree::Document::parse(&data)?;
@@ -277,7 +296,10 @@ fn get_j2ses(resources: &Node) -> Option<Vec<J2se>> {
             if let Some(java_vm_args) = n.attribute("java-vm-args") {
                 if let Some(version) = n.attribute("version") {
                     let java_vm_args = Some(java_vm_args.to_string());
-                    let j2se = J2se{ java_vm_args, version: version.to_string()};
+                    let j2se = J2se {
+                        java_vm_args,
+                        version: version.to_string(),
+                    };
                     j2ses.push(j2se);
                 }
             }
@@ -304,7 +326,9 @@ fn normalize_url(u: &str) -> Result<String, Error> {
     reconstructed_url.push_str(parsed_url.scheme());
     reconstructed_url.push_str("://");
     reconstructed_url.push_str(parsed_url.host_str().map_or("", |h| h));
-    let port = parsed_url.port().map_or("".to_string(), |p| format!(":{}", p));
+    let port = parsed_url
+        .port()
+        .map_or("".to_string(), |p| format!(":{}", p));
     reconstructed_url.push_str(&port);
     reconstructed_url.push('/');
     let mut path_parts = parsed_url.path().split_terminator("/");
@@ -321,8 +345,8 @@ fn normalize_url(u: &str) -> Result<String, Error> {
 
 #[cfg(test)]
 mod tests {
-    use anyhow::Error;
     use crate::webstart::normalize_url;
+    use anyhow::Error;
 
     #[test]
     pub fn test_normalize_url() -> Result<(), Error> {
@@ -330,7 +354,10 @@ mod tests {
             ("https://localhost:8443", "https://localhost:8443"),
             ("https://localhost:8443/", "https://localhost:8443"),
             ("https://localhost:8443//", "https://localhost:8443"),
-            ("https://localhost:8443//a///bv", "https://localhost:8443/a/bv")
+            (
+                "https://localhost:8443//a///bv",
+                "https://localhost:8443/a/bv",
+            ),
         ];
 
         for (src, expected) in candidates {

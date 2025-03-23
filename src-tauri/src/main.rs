@@ -3,9 +3,8 @@
 
 use std::fs;
 use std::path::PathBuf;
-use std::process::{exit};
+use std::process::exit;
 use std::sync::Arc;
-
 
 use serde_json::Number;
 use tauri::State;
@@ -13,18 +12,21 @@ use tauri::State;
 use crate::connection::{ConnectionEntry, ConnectionStore};
 use crate::webstart::{WebStartCache, WebstartFile};
 
-mod webstart;
 mod connection;
-mod verify;
 mod errors;
+mod verify;
+mod webstart;
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[tauri::command]
 async fn get_ballista_info() -> String {
     let mut obj = serde_json::Map::new();
-    obj.insert("ballista_version".to_string(), serde_json::Value::String(String::from(APP_VERSION)));
-    return serde_json::to_string(&obj).unwrap()
+    obj.insert(
+        "ballista_version".to_string(),
+        serde_json::Value::String(String::from(APP_VERSION)),
+    );
+    return serde_json::to_string(&obj).unwrap();
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -69,7 +71,7 @@ fn load_connections(cs: State<ConnectionStore>) -> String {
 
 #[tauri::command]
 fn save(ce: &str, cs: State<ConnectionStore>) -> String {
-    let ce : serde_json::Result<ConnectionEntry> = serde_json::from_str(ce);
+    let ce: serde_json::Result<ConnectionEntry> = serde_json::from_str(ce);
     //println!("received connection data {:?}", ce);
     let r = cs.save(ce.expect("failed to deserialize the given ConnectionEntry"));
     if let Err(e) = r {
@@ -121,7 +123,10 @@ fn main() {
     let r = fs::create_dir(&bd);
     if let Ok(_) = r {
         move_file(hd.join("catapult-data.json"), bd.join("ballista-data.json"));
-        move_file(hd.join("catapult-trusted-certs.json"), bd.join("ballista-trusted-certs.json"));
+        move_file(
+            hd.join("catapult-trusted-certs.json"),
+            bd.join("ballista-trusted-certs.json"),
+        );
     }
 
     let cs = ConnectionStore::init(bd);
@@ -132,17 +137,40 @@ fn main() {
 
     let wc = WebStartCache::init();
     tauri::Builder::default()
+        .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_fs::init())
+        .plugin(tauri_plugin_os::init())
+        .plugin(tauri_plugin_global_shortcut::Builder::new().build())
+        .plugin(tauri_plugin_http::init())
+        .plugin(tauri_plugin_shell::init())
         .manage(cs.unwrap())
         .manage(wc)
-        .invoke_handler(tauri::generate_handler![launch, import, delete, save, load_connections, trust_cert, get_ballista_info])
+        .invoke_handler(tauri::generate_handler![
+            launch,
+            import,
+            delete,
+            save,
+            load_connections,
+            trust_cert,
+            get_ballista_info
+        ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }
 
 fn create_json_resp(code: i32, msg: &str) -> String {
     let mut obj = serde_json::Map::new();
-    obj.insert("code".to_string(), serde_json::Value::Number(Number::from(code)));
-    obj.insert("msg".to_string(), serde_json::Value::String(String::from(msg)));
+    obj.insert(
+        "code".to_string(),
+        serde_json::Value::Number(Number::from(code)),
+    );
+    obj.insert(
+        "msg".to_string(),
+        serde_json::Value::String(String::from(msg)),
+    );
     serde_json::to_string(&obj).unwrap()
 }
 
@@ -150,7 +178,12 @@ fn move_file(old: PathBuf, new: PathBuf) {
     if old.exists() && !new.exists() {
         let r = fs::rename(&old, &new);
         if let Err(e) = r {
-            println!("failed to move the file from {:?} to {:?} : {}", old, new, e.to_string());
+            println!(
+                "failed to move the file from {:?} to {:?} : {}",
+                old,
+                new,
+                e.to_string()
+            );
         }
     }
 }

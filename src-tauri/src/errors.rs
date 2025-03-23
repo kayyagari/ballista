@@ -1,16 +1,16 @@
+use openssl::error::ErrorStack;
+use openssl::x509::{X509NameRef, X509};
+use rustc_hash::FxHashMap;
+use serde_json::{Number, Value};
 use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
 use std::io::Error;
-use openssl::error::ErrorStack;
-use openssl::x509::{X509, X509NameRef};
-use rustc_hash::FxHashMap;
 use zip::result::ZipError;
-use serde_json::{Number, Value};
 
 #[derive(Debug)]
 pub struct VerificationError {
     pub(crate) cert: Option<X509>,
-    pub(crate) msg: String
+    pub(crate) msg: String,
 }
 
 impl VerificationError {
@@ -48,33 +48,49 @@ impl Display for VerificationError {
 
 impl From<std::io::Error> for VerificationError {
     fn from(value: Error) -> Self {
-        VerificationError{cert: None, msg: value.to_string()}
+        VerificationError {
+            cert: None,
+            msg: value.to_string(),
+        }
     }
 }
 
 impl From<ZipError> for VerificationError {
     fn from(value: ZipError) -> Self {
-        VerificationError{cert: None, msg: value.to_string()}
+        VerificationError {
+            cert: None,
+            msg: value.to_string(),
+        }
     }
 }
 
 impl From<anyhow::Error> for VerificationError {
     fn from(value: anyhow::Error) -> Self {
-        VerificationError{cert: None, msg: value.to_string()}
+        VerificationError {
+            cert: None,
+            msg: value.to_string(),
+        }
     }
 }
 
 impl From<ErrorStack> for VerificationError {
     fn from(value: ErrorStack) -> Self {
-        VerificationError{cert: None, msg: value.to_string()}
+        VerificationError {
+            cert: None,
+            msg: value.to_string(),
+        }
     }
 }
 
-fn format_name(name: &X509NameRef ) -> String {
+fn format_name(name: &X509NameRef) -> String {
     let mut parts = VecDeque::new();
     let mut formatted_name = String::with_capacity(128);
     for e in name.entries() {
-        let p = format!("{}={}", e.object().nid().short_name().unwrap(), e.data().as_utf8().unwrap().to_string());
+        let p = format!(
+            "{}={}",
+            e.object().nid().short_name().unwrap(),
+            e.data().as_utf8().unwrap().to_string()
+        );
         parts.push_front(p);
     }
 
