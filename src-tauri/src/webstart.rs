@@ -1,11 +1,13 @@
-use std::env;
+use std::{env, io};
 use std::fs::File;
+use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use anyhow::Error;
+use hex::encode;
 use openssl::x509::store::X509StoreRef;
 use reqwest::blocking::{Client, ClientBuilder};
 use reqwest::Url;
@@ -24,7 +26,7 @@ pub struct WebstartFile {
     args: Vec<String>,
     j2ses: Option<Vec<J2se>>,
     //jars: Vec<Jar>,
-    tmp_dir: PathBuf,
+    jar_dir: PathBuf,
     loaded_at: SystemTime,
 }
 
@@ -66,8 +68,8 @@ impl WebStartCache {
 }
 
 impl WebstartFile {
-    pub fn load(base_url: &str) -> Result<WebstartFile, Error> {
-        let base_url = normalize_url(base_url)?;
+    pub fn load(base_url: &str, cache_dir: &PathBuf, donotcache: bool) -> Result<WebstartFile, Error> {
+        let (base_url, host) = normalize_url(base_url)?;
         let webstart = format!("{}/webstart.jnlp", base_url); // base_url will never contain a / at the end after normalization
         let cb = ClientBuilder::default()
             // in certain network environments client is failing with error message "connection closed before message completed"
@@ -95,17 +97,24 @@ impl WebstartFile {
 
         let resources_node = get_node(&root, "resources");
 
-        let mut hasher = Sha256::new();
-        hasher.update(&webstart);
-        let hash = hasher.finalize();
-        let hash = hex::encode(&hash);
-        let tmp_dir = env::temp_dir().join(format!("ballista/{}", hash));
-        println!("creating directory {:?}", tmp_dir);
-        if tmp_dir.exists() {
-            std::fs::remove_dir_all(&tmp_dir)?;
+        let mut version = "default";
+        if let Some(jnlp_node) = get_node(&root, "jnlp") {
+            if let Some(v) = jnlp_node.attribute("version") {
+                version = v;
+            }
         }
-        let dir_path = tmp_dir.as_path();
-        std::fs::create_dir_all(dir_path)?;
+
+        let jar_dir = cache_dir.join(host).join(version);
+        if donotcache && jar_dir.exists() {
+            println!("removing directory {:?}", jar_dir);
+            std::fs::remove_dir_all(&jar_dir)?;
+        }
+
+        let dir_path = jar_dir.as_path();
+        if !jar_dir.exists() {
+            println!("creating directory {:?}", jar_dir);
+            std::fs::create_dir_all(dir_path)?;
+        }
 
         let mut j2ses = None;
         if let Some(resources_node) = resources_node {
@@ -117,7 +126,7 @@ impl WebstartFile {
         let ws = WebstartFile {
             url: base_url.to_string(),
             main_class,
-            tmp_dir,
+            jar_dir,
             args,
             loaded_at,
             j2ses,
@@ -127,7 +136,7 @@ impl WebstartFile {
     }
 
     pub fn run(&self, ce: Arc<ConnectionEntry>) -> Result<(), Error> {
-        let itr = self.tmp_dir.read_dir()?;
+        let itr = self.jar_dir.read_dir()?;
         let mut classpath = String::with_capacity(1152);
         let mut classpath_suffix = String::with_capacity(1024);
         for e in itr {
@@ -214,7 +223,7 @@ impl WebstartFile {
     pub fn verify(&self, cert_store: &X509StoreRef) -> Result<(), VerificationError> {
         let mut jar_files = Vec::with_capacity(128);
         let itr = self
-            .tmp_dir
+            .jar_dir
             .read_dir()
             .expect("failed to read the jar files directory");
         for e in itr {
@@ -250,13 +259,21 @@ fn download_jars(
         }
 
         let href = n.attribute("href").unwrap();
+        let hash_in_jnlp = n.attribute("sha256");
         let url = format!("{}/{}", base_url, href);
 
         if jar {
             let file_name = get_file_name_from_path(href);
-            let mut resp = client.get(url).send()?;
-            let mut f = File::create(dir_path.join(file_name))?;
-            resp.copy_to(&mut f)?;
+            let jar_file_path = dir_path.join(file_name);
+            if has_file_changed(&jar_file_path, hash_in_jnlp)? {
+                //println!("downloading file {}", file_name);
+                let mut resp = client.get(url).send()?;
+                let mut f = File::create(&jar_file_path)?;
+                resp.copy_to(&mut f)?;
+            }
+            else {
+                //println!("file {} is cached", file_name);
+            }
         } else if extension {
             let r = client.get(url).send()?;
             let data = r.text()?;
@@ -320,12 +337,13 @@ fn get_node<'a>(root: &'a Node, tag_name: &str) -> Option<Node<'a, 'a>> {
     })
 }
 
-fn normalize_url(u: &str) -> Result<String, Error> {
+fn normalize_url(u: &str) -> Result<(String, String), Error> {
     let parsed_url = Url::parse(u)?;
     let mut reconstructed_url = String::with_capacity(u.len());
     reconstructed_url.push_str(parsed_url.scheme());
     reconstructed_url.push_str("://");
-    reconstructed_url.push_str(parsed_url.host_str().map_or("", |h| h));
+    let host = parsed_url.host_str().map_or("", |h| h);
+    reconstructed_url.push_str(host);
     let port = parsed_url
         .port()
         .map_or("".to_string(), |p| format!(":{}", p));
@@ -340,9 +358,31 @@ fn normalize_url(u: &str) -> Result<String, Error> {
     }
 
     reconstructed_url.pop(); // remove the trailing /
-    Ok(reconstructed_url)
+    let host = format!("{}{}", host, port).replace(":", "_");
+    Ok((reconstructed_url, host))
 }
 
+fn has_file_changed(jar_file_path: &Path, hash_in_jnlp: Option<&str>) -> Result<bool, Error> {
+    if let Some(hash_in_jnlp) = hash_in_jnlp {
+        let mut hasher = Sha256::new();
+        if jar_file_path.exists() {
+            let jar_file = File::open(&jar_file_path)?;
+            let mut reader = BufReader::new(&jar_file);
+            let mut buf = [0; 2048];
+            while let Ok(count) = reader.read(&mut buf) {
+                if count <= 0 {
+                    break;
+                }
+                hasher.update(&buf[..count]);
+            }
+            let val = hasher.finalize();
+            let val = openssl::base64::encode_block(val.as_slice());
+            return Ok(hash_in_jnlp != &val);
+        }
+    }
+
+    Ok(true)
+}
 #[cfg(test)]
 mod tests {
     use crate::webstart::normalize_url;

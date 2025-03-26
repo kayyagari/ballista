@@ -14,6 +14,7 @@ export interface Connection {
     verify: boolean,
     group: string,
     notes: string,
+    donotcache: boolean,
 
     // the below properties are transient and are used only in the UI
     nodeId: string,

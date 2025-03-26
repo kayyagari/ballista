@@ -7,6 +7,7 @@ use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
+use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::ops::Deref;
@@ -33,11 +34,14 @@ pub struct ConnectionEntry {
     pub group: String,
     #[serde(default = "get_default_notes")]
     pub notes: String,
+    #[serde(default = "get_default_donotcache")]
+    pub donotcache: bool,
 }
 
 pub struct ConnectionStore {
-    cache: Mutex<HashMap<String, Arc<ConnectionEntry>>>,
+    con_cache: Mutex<HashMap<String, Arc<ConnectionEntry>>>,
     con_location: PathBuf,
+    pub cache_dir: PathBuf,
     cert_store: Mutex<Arc<X509Store>>,
     trusted_certs_location: PathBuf,
 }
@@ -57,6 +61,7 @@ impl Default for ConnectionEntry {
             verify: true,
             group: get_default_group(),
             notes: get_default_notes(),
+            donotcache: get_default_donotcache(),
         }
     }
 }
@@ -89,19 +94,25 @@ impl ConnectionStore {
         // }
         // let trusted_certs_location_file = trusted_certs_location_file?;
 
+        let cache_dir = data_dir_path.join("cache");
+        if !cache_dir.exists() {
+            fs::create_dir(&cache_dir)?;
+        }
+
         Ok(ConnectionStore {
             con_location,
-            cache: Mutex::new(cache),
+            con_cache: Mutex::new(cache),
             cert_store: Mutex::new(Arc::new(cert_store)),
             trusted_certs_location,
+            cache_dir
         })
     }
 
     pub fn to_json_array_string(&self) -> String {
         let mut sb = String::with_capacity(1024);
-        let len = self.cache.lock().unwrap().len();
+        let len = self.con_cache.lock().unwrap().len();
         sb.push('[');
-        for (pos, ce) in self.cache.lock().unwrap().values().enumerate() {
+        for (pos, ce) in self.con_cache.lock().unwrap().values().enumerate() {
             let c = serde_json::to_string(ce).expect("failed to serialize ConnectionEntry");
             sb.push_str(c.as_str());
             if pos + 1 < len {
@@ -114,7 +125,7 @@ impl ConnectionStore {
     }
 
     pub fn get(&self, id: &str) -> Option<Arc<ConnectionEntry>> {
-        let cs = self.cache.lock().unwrap();
+        let cs = self.con_cache.lock().unwrap();
         let val = cs.get(id);
         if let Some(val) = val {
             return Some(Arc::clone(val));
@@ -148,7 +159,7 @@ impl ConnectionStore {
         }
 
         let data = serde_json::to_string(&ce)?;
-        self.cache
+        self.con_cache
             .lock()
             .unwrap()
             .insert(ce.id.clone(), Arc::new(ce));
@@ -157,7 +168,7 @@ impl ConnectionStore {
     }
 
     pub fn delete(&self, id: &str) -> Result<(), Error> {
-        self.cache.lock().unwrap().remove(id);
+        self.con_cache.lock().unwrap().remove(id);
         self.write_connections_to_disk()?;
         Ok(())
     }
@@ -169,7 +180,7 @@ impl ConnectionStore {
         let java_home = find_java_home();
         for mut ce in data {
             ce.java_home = java_home.clone();
-            self.cache
+            self.con_cache
                 .lock()
                 .unwrap()
                 .insert(ce.id.clone(), Arc::new(ce));
@@ -219,7 +230,7 @@ impl ConnectionStore {
     }
 
     fn write_connections_to_disk(&self) -> Result<(), Error> {
-        let c = self.cache.lock().unwrap();
+        let c = self.con_cache.lock().unwrap();
         let val = serde_json::to_string_pretty(c.deref())?;
         let f = OpenOptions::new()
             .append(false)
@@ -329,4 +340,8 @@ fn get_default_group() -> String {
 
 fn get_default_notes() -> String {
     String::from("")
+}
+
+fn get_default_donotcache() -> bool {
+    false
 }

@@ -40,6 +40,7 @@ import {
 } from './connection';
 import Search from "antd/es/input/Search";
 import {BallistaInfo, requestBallistaInfo} from "./ballistaInfo";
+import TextArea from "antd/es/input/TextArea";
 const appWindow = getCurrentWebviewWindow()
 
 const { Content, Sider } = Layout;
@@ -112,6 +113,7 @@ function App() {
         password: "",
         verify: true,
         group: "Default",
+        donotcache: false,
         notes: "",
         nodeId: "",
         parentId: ""
@@ -310,6 +312,14 @@ function App() {
         setDirty(true);
     }
 
+    function updateDonotcache(e: any) {
+        setCc({
+            ...cc,
+            donotcache: e.target.checked
+        })
+        setDirty(true);
+    }
+
     function updateNotes(e: any) {
         setCc({
             ...cc,
@@ -371,7 +381,10 @@ function App() {
         }
     }
 
-    const onTreeNodeSelect = (selectedKeys: React.Key[], info: any) => {
+    const onTreeNodeSelect = async (selectedKeys: React.Key[], info: any) => {
+        if(dirty) {
+            setDirty(false);
+        }
         setSelectedTreeNodeKey(selectedKeys);
         if(info.node.con) {
             setCc(info.node.con);
@@ -536,13 +549,24 @@ function App() {
                                         options={groupNames.map((name) => ({ label: name, value: name }))}
                                     />
                                 </Col>
+                                <Col>
+                                    <Checkbox checked={cc.donotcache} onChange={updateDonotcache}>Do not cache</Checkbox>
+                                </Col>
+                            </Row>
+                            <Row align={'middle'} gutter={[24, 3]}>
+                                <Col span={4}>Notes:</Col>
+                                <Col span={20} style={{marginTop: 10}}>
+                                    <TextArea placeholder="Add a note related to this connection" allowClear
+                                              size={"middle"} autoSize={{ minRows: 4, maxRows: 4 }}
+                                              maxLength={1024} value={cc.notes} onChange={updateNotes}/>
+                                </Col>
                             </Row>
                             <Row>
                                 <Col span={20} style={{ marginTop: 20, alignContent: "end" }}>
                                     <Button type={"primary"} disabled={!dirty} onClick={saveConnection}>Save</Button>
                                 </Col>
                             </Row>
-                            <Row style={{ marginTop: 150 }}>
+                            <Row style={{ marginTop: 50 }}>
                                 <Col style={{ alignContent: "end" }}><Button type={"primary"} danger onClick={deleteConnection} disabled={cc.id == ""}>Delete</Button></Col>
                             </Row>
                         </div>

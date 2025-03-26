@@ -35,7 +35,7 @@ fn launch(id: &str, cs: State<ConnectionStore>, wc: State<WebStartCache>) -> Str
     if let Some(ce) = ce {
         let mut ws = wc.get(&ce.address);
         if let None = ws {
-            let tmp = WebstartFile::load(&ce.address);
+            let tmp = WebstartFile::load(&ce.address, &cs.cache_dir, ce.donotcache);
             if let Err(e) = tmp {
                 let msg = e.to_string();
                 println!("{}", msg);
