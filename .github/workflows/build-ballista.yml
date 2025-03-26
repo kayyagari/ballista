@@ -27,7 +27,7 @@ jobs:
         if: startsWith(matrix.platform, 'ubuntu')
         # You can remove libayatana-appindicator3-dev if you don't use the system tray feature.
         run: |
-          echo "\ndeb http://gb.archive.ubuntu.com/ubuntu jammy main" >> /etc/apt/sources.list
+          sudo echo "\ndeb http://gb.archive.ubuntu.com/ubuntu jammy main" >> /etc/apt/sources.list
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.0-dev libayatana-appindicator3-dev librsvg2-dev
 
