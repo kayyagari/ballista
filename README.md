@@ -13,11 +13,11 @@ Ballista cannot open MC Admin Client for version 3.10.1 due to the bug in MC ser
 
 ## Compiling
 
-These compilation instructions are written for users not familiar with Rust and Tauri who just want to build and use Catapault.
+These compilation instructions are written for users not familiar with Rust and Tauri who just want to build and use Ballista.
 
 You should generally follow the Tauri Getting started guide: https://tauri.app/v1/guides/getting-started/prerequisites
 
-A good reference for how to run builds is the file .github/workflows/build-catapault.yml . If you can replicate the same steps the build pipeline does, then you should have good builds!
+A good reference for how to run builds is the file .github/workflows/build-ballista.yml . If you can replicate the same steps the build pipeline does, then you should have good builds!
 
 ### MacOS
 
