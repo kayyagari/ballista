@@ -8,6 +8,7 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "publisher": "Kiran Ayyagari",
     "icon": [
       "icons/32x32.icns",
       "icons/favicon.ico",
@@ -16,12 +17,12 @@
   },
   "productName": "Ballista",
   "mainBinaryName": "Ballista",
-  "identifier": "com.sereen.io",
+  "identifier": "sereen.io",
   "plugins": {},
   "app": {
     "withGlobalTauri": false,
     "trayIcon": {
-      "iconPath": "icons/favicon.ico",
+      "iconPath": "icons/icon.png",
       "title": "Ballista"
     },
     "security": {

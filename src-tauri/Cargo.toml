@@ -3,6 +3,7 @@ name = "ballista"
 version = "0.5.0"
 description = "A Mirth Connect Admin Client Launcher"
 authors = ["kiran@sereen.io"]
+homepage = "https://sereen.io"
 license = "MPL-2.0"
 repository = "https://github.com/kayyagari/ballista"
 edition = "2021"
