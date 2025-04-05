@@ -250,7 +250,8 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
             );
             if let Err(e) = r {
                 let msg = e.to_string();
-                if !msg.contains("unsupported certificate purpose") {
+                println!("verification error: {}", msg);
+                if !msg.contains("certificate purpose") { // could be <[unsupported|unsuitable] certificate purpose>
                     // FIXME find a better way to tell OpenSSL to not check the certificate extensions
                     if msg.contains("cms_signerinfo_verify_cert") {
                         return Err(VerificationError { cert, msg });
