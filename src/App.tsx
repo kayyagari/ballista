@@ -562,12 +562,13 @@ function App() {
                                 </Col>
                             </Row>
                             <Row>
-                                <Col span={20} style={{ marginTop: 20, alignContent: "end" }}>
+                                <Col span={4}>Action:</Col>
+                                <Col span={3} style={{ marginTop: 20, alignContent: "end" }}>
                                     <Button type={"primary"} disabled={!dirty} onClick={saveConnection}>Save</Button>
                                 </Col>
-                            </Row>
-                            <Row style={{ marginTop: 50 }}>
-                                <Col style={{ alignContent: "end" }}><Button type={"primary"} danger onClick={deleteConnection} disabled={cc.id == ""}>Delete</Button></Col>
+                                <Col span={3} style={{ marginTop: 20, alignContent: "end" }}>
+                                    <Button type={"primary"} danger onClick={deleteConnection} disabled={cc.id == ""}>Delete</Button>
+                                </Col>
                             </Row>
                         </div>
                         <CertDialog trustAndLaunch={trustAndLaunch} abortLaunch={abortLaunch} cert={cert}/>
