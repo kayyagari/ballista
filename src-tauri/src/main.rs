@@ -30,12 +30,12 @@ async fn get_ballista_info() -> String {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn launch(id: &str, cs: State<ConnectionStore>, wc: State<WebStartCache>) -> String {
+fn launch(id: &str, cs: State<ConnectionStore>, wc: State<WebStartCache>, ) -> String {
     let ce = cs.get(id);
     if let Some(ce) = ce {
         let mut ws = wc.get(&ce.address);
         if let None = ws {
-            let tmp = WebstartFile::load(&ce.address, &cs.cache_dir, ce.donotcache);
+            let tmp = WebstartFile::load(&ce.address, &cs.cache_dir, ce.donotcache, &cs.log_dir);
             if let Err(e) = tmp {
                 let msg = e.to_string();
                 println!("{}", msg);

@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+#tauri debug and generated files
+debug.der
+src-tauri/gen

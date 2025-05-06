@@ -1,4 +1,3 @@
-use std::{env, io};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -7,14 +6,13 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use anyhow::Error;
-use hex::encode;
 use openssl::x509::store::X509StoreRef;
 use reqwest::blocking::{Client, ClientBuilder};
 use reqwest::Url;
 use roxmltree::Node;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
-
+use chrono::{DateTime, Utc};
 use crate::connection::ConnectionEntry;
 use crate::errors::VerificationError;
 use crate::verify::verify_jar;
@@ -28,6 +26,7 @@ pub struct WebstartFile {
     //jars: Vec<Jar>,
     jar_dir: PathBuf,
     loaded_at: SystemTime,
+    pub(crate) log_dir: PathBuf
 }
 
 /// from jnlp -> resources -> j2se
@@ -68,7 +67,7 @@ impl WebStartCache {
 }
 
 impl WebstartFile {
-    pub fn load(base_url: &str, cache_dir: &PathBuf, donotcache: bool) -> Result<WebstartFile, Error> {
+    pub fn load(base_url: &str, cache_dir: &PathBuf, donotcache: bool, log_dir: &PathBuf) -> Result<WebstartFile, Error> {
         let (base_url, host) = normalize_url(base_url)?;
         let webstart = format!("{}/webstart.jnlp", base_url); // base_url will never contain a / at the end after normalization
         let cb = ClientBuilder::default()
@@ -104,7 +103,15 @@ impl WebstartFile {
             }
         }
 
-        let jar_dir = cache_dir.join(host).join(version);
+        let instance_log_dir = log_dir.join(&host).join(&version);
+        println!("log dir should be: {:?}", log_dir);
+        let instance_log_dir_path = instance_log_dir.as_path();
+        if !instance_log_dir.exists() {
+            println!("creating directory {:?}", instance_log_dir_path);
+            std::fs::create_dir_all(instance_log_dir_path)?;
+        }
+
+        let jar_dir = cache_dir.join(&host).join(&version);
         if donotcache && jar_dir.exists() {
             println!("removing directory {:?}", jar_dir);
             std::fs::remove_dir_all(&jar_dir)?;
@@ -130,6 +137,7 @@ impl WebstartFile {
             args,
             loaded_at,
             j2ses,
+            log_dir: instance_log_dir,
         };
 
         Ok(ws)
@@ -210,7 +218,10 @@ impl WebstartFile {
             }
         }
 
-        let log_file_path = env::temp_dir().join("ballista.log");
+        let now = SystemTime::now();
+        let now: DateTime<Utc> = now.into();
+        let log_file_name = now.format("%F_%H-%M-%S-ballista.log").to_string();
+        let log_file_path = self.log_dir.join(log_file_name);
         println!("log_file_path {:?}", log_file_path);
         let f = File::create(log_file_path)?;
         cmd.stdout(Stdio::from(f));
@@ -349,7 +360,7 @@ fn normalize_url(u: &str) -> Result<(String, String), Error> {
         .map_or("".to_string(), |p| format!(":{}", p));
     reconstructed_url.push_str(&port);
     reconstructed_url.push('/');
-    let mut path_parts = parsed_url.path().split_terminator("/");
+    let path_parts = parsed_url.path().split_terminator("/");
     for pp in path_parts {
         if !pp.is_empty() {
             reconstructed_url.push_str(pp);
