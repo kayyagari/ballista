@@ -28,7 +28,7 @@ uuid = {version = "1.14.0", feature= ["v4", "fast-rng"] }
 home = "0.5.11"
 zip = {version = "2.2.2", feature = ["deflate"] }
 rustc-hash = "2.1.1"
-openssl = { version = "0.10.71", features = ["vendored"] }
+openssl = { version = "0.10.71" }
 openssl-probe = "0.1.6"
 asn1-rs = "0.7.0"
 tauri-plugin-shell = "2.2.0"
@@ -39,6 +39,7 @@ tauri-plugin-process = "2.2.0"
 tauri-plugin-clipboard-manager = "2.2.1"
 tauri-plugin-dialog = "2.2.0"
 tauri-plugin-notification = "2.2.1"
+chrono = "0.4.26"
 
 [dependencies.fix-path-env]
 git = "https://github.com/tauri-apps/fix-path-env-rs"
