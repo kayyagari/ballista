@@ -198,6 +198,26 @@ impl WebstartFile {
             cmd.arg(format!("-Xmx{}", heap));
         }
 
+        if let Ok(port) = env::var("debugport") {
+            let port = port.parse::<u32>();
+            if let Err(e) = port {
+                let msg = format!("invalid debug port number {}", e);
+                return Err(anyhow::anyhow!(msg));
+            }
+
+            let port = port.unwrap();
+            let mut suspend = env::var("suspend").map_or(String::from("n"), |s| s);
+            if(suspend != "n") {
+                suspend = String::from("y");
+            }
+
+            println!("enabling debugging at port {} with suspend flag set to {}", port, suspend);
+            cmd.arg("-Xdebug");
+            cmd.arg("-Xnoagent");
+            cmd.arg("-Djava.compiler=NONE");
+            cmd.arg(format!("-Xrunjdwp:transport=dt_socket,server=y,suspend={},address={}", suspend, port));
+        }
+
         cmd.arg("-cp")
             .arg(classpath)
             .arg(&self.main_class)
@@ -210,10 +230,9 @@ impl WebstartFile {
             }
         }
 
-        let log_file_path = env::temp_dir().join("ballista.log");
-        println!("log_file_path {:?}", log_file_path);
-        let f = File::create(log_file_path)?;
-        cmd.stdout(Stdio::from(f));
+        // inherit the parent's IO handles so that child's sysout and syserr messages can be seen on the terminal
+        cmd.stdout(Stdio::inherit());
+        cmd.stderr(Stdio::inherit());
         //TODO noisy, should be a debug logger
         //println!("Executing with: {:?}", cmd);
         cmd.spawn()?;
