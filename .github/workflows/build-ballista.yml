@@ -53,9 +53,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'App Name v__VERSION__'
-          releaseBody: 'See the assets to download and install this version.'
+          #tagName: ${{ github.ref_name }}
+          #releaseName: 'App Name v__VERSION__'
+          #releaseBody: 'See the assets to download and install this version.'
           releaseDraft: ${{ github.ref == 'refs/heads/master' }} # Only create release on master branch
           prerelease: false
 
