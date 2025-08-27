@@ -48,15 +48,25 @@ jobs:
       - name: Install frontend dependencies
         run: npm install
 
-      - name: Build the app
+      - name: Build the app and release
+        if: ${{ github.ref == 'refs/heads/master' }}
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          #tagName: ${{ github.ref_name }}
-          #releaseName: 'App Name v__VERSION__'
-          #releaseBody: 'See the assets to download and install this version.'
-          releaseDraft: ${{ github.ref == 'refs/heads/master' }} # Only create release on master branch
+          tagName: ${{ github.ref_name }}
+          releaseName: 'App Name v__VERSION__'
+          releaseBody: 'See the assets to download and install this version.'
+          releaseDraft: true
+          prerelease: false
+
+      - name: Build the app
+        if: ${{ github.ref != 'refs/heads/master' }}
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          releaseDraft: false
           prerelease: false
 
       - name: Upload Artifact
