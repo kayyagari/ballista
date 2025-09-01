@@ -198,24 +198,9 @@ impl WebstartFile {
             cmd.arg(format!("-Xmx{}", heap));
         }
 
-        if let Ok(port) = env::var("debugport") {
-            let port = port.parse::<u32>();
-            if let Err(e) = port {
-                let msg = format!("invalid debug port number {}", e);
-                return Err(anyhow::anyhow!(msg));
-            }
-
-            let port = port.unwrap();
-            let mut suspend = env::var("suspend").map_or(String::from("n"), |s| s);
-            if(suspend != "n") {
-                suspend = String::from("y");
-            }
-
-            println!("enabling debugging at port {} with suspend flag set to {}", port, suspend);
-            cmd.arg("-Xdebug");
-            cmd.arg("-Xnoagent");
-            cmd.arg("-Djava.compiler=NONE");
-            cmd.arg(format!("-Xrunjdwp:transport=dt_socket,server=y,suspend={},address={}", suspend, port));
+        if let Some(args) = ce.java_args.as_deref() {
+            // Should probably do some sanitization here...
+            cmd.args(args.trim().lines());
         }
 
         cmd.arg("-cp")

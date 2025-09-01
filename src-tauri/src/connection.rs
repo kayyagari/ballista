@@ -25,6 +25,8 @@ pub struct ConnectionEntry {
     pub id: String,
     #[serde(rename = "javaHome")]
     pub java_home: String,
+    #[serde(rename = "javaArgs")]
+    pub java_args: Option<String>,
     pub name: String,
     pub username: Option<String>,
     pub password: Option<String>,
@@ -55,6 +57,7 @@ impl Default for ConnectionEntry {
             icon: empty_str.clone(),
             id: Uuid::new_v4().to_string(),
             java_home: find_java_home(),
+            java_args: Option::from(empty_str.clone()),
             name: empty_str.clone(),
             username: None,
             password: None,
