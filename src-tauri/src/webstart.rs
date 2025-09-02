@@ -405,8 +405,8 @@ mod tests {
         ];
 
         for (src, expected) in candidates {
-            let actual = normalize_url(src)?;
-            assert_eq!(expected, &actual);
+            let (reconstructed_url, _host) = normalize_url(src)?;
+            assert_eq!(expected, &reconstructed_url);
         }
         Ok(())
     }
