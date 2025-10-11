@@ -26,13 +26,13 @@ sha2 = "0.10.9"
 hex = "0.4.3"
 uuid = {version = "1.18.0", features = ["v4", "fast-rng"] }
 home = "0.5.11"
-zip = {version = "2.4.2", feature = ["deflate"] }
+zip = {version = "2.4.2", features = ["deflate"] }
 rustc-hash = "2.1.1"
 openssl = { version = "0.10.73", features = ["vendored"] }
 openssl-probe = "0.1.6"
 asn1-rs = "0.7.1"
 tauri-plugin-shell = "2.3.0"
-tauri-plugin-http = "2.5.2"
+tauri-plugin-http = { version = "2.5.2", features = ["dangerous-settings"] }
 tauri-plugin-os = "2.3.1"
 tauri-plugin-fs = "2.4.2"
 tauri-plugin-process = "2.3.0"

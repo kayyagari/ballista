@@ -65,8 +65,26 @@ fn launch(id: &str, cs: State<ConnectionStore>, wc: State<WebStartCache>) -> Str
 }
 
 #[tauri::command]
+fn get_default_connectionentry(cs: State<ConnectionStore>) -> Result<serde_json::Value, String> {
+    let connection_entry = ConnectionEntry::default();
+    Ok(serde_json::json!(connection_entry))
+}
+
+#[tauri::command]
+fn get_all_groups(cs: State<ConnectionStore>) -> Result<serde_json::Value, String> {
+    let groups = cs.get_all_groups().unwrap();
+    Ok(serde_json::json!(groups))
+}
+
+#[tauri::command]
 fn load_connections(cs: State<ConnectionStore>) -> String {
     cs.to_json_array_string()
+}
+
+#[tauri::command]
+fn load_single_connection(cs: State<ConnectionStore>, connection_id: String) -> Result<serde_json::Value, String> {
+    let connection_entry = cs.get(connection_id.as_str()).unwrap();
+    Ok(serde_json::json!(connection_entry))
 }
 
 #[tauri::command]
@@ -117,25 +135,25 @@ fn main() {
         println!("failed to read JAVA_HOME and PATH environment variables");
     }
 
-    let hd = home::home_dir().expect("unable to find the path to home directory");
+    let home_directory = home::home_dir().expect("unable to find the path to home directory");
     // <= 0.2.0 migrate to a new app specific location
-    let bd = hd.join(".ballista");
-    let r = fs::create_dir(&bd);
+    let ballista_directory = home_directory.join(".ballista");
+    let r = fs::create_dir(&ballista_directory);
     if let Ok(_) = r {
-        move_file(hd.join("catapult-data.json"), bd.join("ballista-data.json"));
+        move_file(home_directory.join("catapult-data.json"), ballista_directory.join("ballista-data.json"));
         move_file(
-            hd.join("catapult-trusted-certs.json"),
-            bd.join("ballista-trusted-certs.json"),
+            home_directory.join("catapult-trusted-certs.json"),
+            ballista_directory.join("ballista-trusted-certs.json"),
         );
     }
 
-    let cs = ConnectionStore::init(bd);
-    if let Err(e) = cs {
+    let connection_store = ConnectionStore::init(ballista_directory);
+    if let Err(e) = connection_store {
         println!("failed to initialize ConnectionStore: {}", e.to_string());
         exit(1);
     }
 
-    let wc = WebStartCache::init();
+    let webcache = WebStartCache::init();
     tauri::Builder::default()
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_dialog::init())
@@ -146,14 +164,17 @@ fn main() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_shell::init())
-        .manage(cs.unwrap())
-        .manage(wc)
+        .manage(connection_store.unwrap())
+        .manage(webcache)
         .invoke_handler(tauri::generate_handler![
             launch,
             import,
             delete,
             save,
+            get_default_connectionentry,
+            get_all_groups,
             load_connections,
+            load_single_connection,
             trust_cert,
             get_ballista_info
         ])

@@ -6,7 +6,7 @@ use openssl::x509::X509;
 use rustc_hash::FxHashMap;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::Write;
@@ -247,6 +247,26 @@ impl ConnectionStore {
         }
         f.unwrap().write_all(val.as_bytes())?;
         Ok(())
+    }
+
+    pub fn get_all_groups(&self) -> Result<HashSet<String>, Error> {
+        let connections = self.con_cache
+            .lock()
+            .unwrap();
+
+        let mut groups: HashSet<String> = HashSet::new();
+
+        // Ensure default group
+        groups.insert(get_default_group());
+
+        let collected_groups: HashSet<String> = connections
+            .values()
+            .map(|connection_entry| connection_entry.group.clone())  // extract the property
+            .collect();
+
+        groups.extend(collected_groups);
+
+        Ok(groups)
     }
 }
 
