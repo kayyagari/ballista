@@ -30,15 +30,17 @@ const launchServer = async () => {
 
   // FIXME This is a nasty hack to get the loading icon
   setTimeout(async () => {
-    const response: string = await invoke('launch', {id: connectionToLaunch.value!!.id})
-    const result: any = JSON.parse(response)
+    try {
+      const response: string = await invoke('launch', {id: connectionToLaunch.value!!.id})
+      const result: any = JSON.parse(response)
 
-    if (result.code === 1) {
+      if (result.code === 1) {
+        isLoading.value = false
+        cert.value = result.cert
+      }
+    } finally {
       isLoading.value = false
-      cert.value = result.cert
     }
-
-    isLoading.value = false
   }, 100)
 }
 
