@@ -1,5 +1,5 @@
 export enum LandingScreenServerStatus {
-    AVAILABLE,
-    UNAVAILABLE,
-    PENDING,
+  AVAILABLE,
+  UNAVAILABLE,
+  PENDING,
 }

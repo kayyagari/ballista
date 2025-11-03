@@ -1,5 +1,5 @@
-@import 'tailwindcss';
+@import "tailwindcss";
 
 @theme {
-    --color-border: #dbe5eb;
+  --color-border: #dbe5eb;
 }
