@@ -1,16 +1,18 @@
 # Ballista
+
 A lean and simple launcher compatible with Open Integration Engine and Mirth Connect®.
 
 ## How To Use
+
 1. Go to releases and download a suitable installer for your OS platform
 2. Create a new connection or if you are using MirthConnect Admin Launcher then import existing connections from `<MCAL-root>/data/connections.json`
 
-3.
-    - Launch a connection by clicking on the desired server 
-    - A connection can be edited by clicking on the wrench icon in the right end of the row
+3. - Launch a connection by clicking on the desired server
+   - A connection can be edited by clicking on the wrench icon in the right end of the row
 4. Adjust the `Java Home` field's value if necessary (please note that Ballista assumes JRE version 8 or higher was already installed on the local machine)
 
 ## Known Issues
+
 Ballista cannot open MC Admin Client for version 3.10.1 due to a [bug in MC server](https://github.com/nextgenhealthcare/connect/issues/4432).
 This bug in MC server was fixed in version 3.11.0.
 
@@ -44,9 +46,10 @@ Some Arch-based distros require compiling the application with `NO_STRIP=true` e
 
 Please make a PR if you use Windows and know how to compile the app!
 
-___Follow the instructions at___: https://tauri.app/v1/guides/getting-started/prerequisites/#setting-up-windows
+**_Follow the instructions at_**: https://tauri.app/v1/guides/getting-started/prerequisites/#setting-up-windows
 
-Follow the openssl instructions at: https://docs.rs/crate/openssl/0.9.24 *EXCEPT* you have to use different commands to set env vars in PowerShell:
+Follow the openssl instructions at: https://docs.rs/crate/openssl/0.9.24 _EXCEPT_ you have to use different commands to set env vars in PowerShell:
+
 ```
 $env:OPENSSL_DIR='C:\Program Files\OpenSSL-Win64\'
 $env:OPENSSL_INCLUDE_DIR='C:\Program Files\OpenSSL-Win64\include'

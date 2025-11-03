@@ -3,10 +3,10 @@ name: Build on every push and every pull-request
 on:
   pull_request:
     paths-ignore:
-      - '*.md'
+      - "*.md"
   push:
     paths-ignore:
-      - '*.md'
+      - "*.md"
   workflow_dispatch:
 
 jobs:
@@ -37,13 +37,13 @@ jobs:
       - name: Rust cache
         uses: swatinem/rust-cache@v2
         with:
-          workspaces: './src-tauri -> target'
+          workspaces: "./src-tauri -> target"
 
       - name: Sync node version and setup cache
         uses: actions/setup-node@v4
         with:
           node-version: 24
-          cache: 'npm'
+          cache: "npm"
 
       - name: Install frontend dependencies
         run: npm install
@@ -55,8 +55,8 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: 'App Name v__VERSION__'
-          releaseBody: 'See the assets to download and install this version.'
+          releaseName: "App Name v__VERSION__"
+          releaseBody: "See the assets to download and install this version."
           releaseDraft: true
           prerelease: false
 
