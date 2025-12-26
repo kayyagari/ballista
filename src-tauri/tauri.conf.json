@@ -31,7 +31,7 @@
     "windows": [
       {
         "fullscreen": false,
-        "resizable": false,
+        "resizable": true,
         "title": "Ballista",
         "width": 900,
         "height": 600,
