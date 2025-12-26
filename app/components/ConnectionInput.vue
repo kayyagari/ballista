@@ -10,7 +10,9 @@ const inputId = useId()
 </script>
 
 <template>
-  <label :for="inputId" v-if="label" class="select-none font-bold">{{ label }}</label>
+  <label :for="inputId" v-if="label" class="select-none font-bold">
+    {{ label }}
+  </label>
   <input
     :id="inputId"
     :type="type"

@@ -1,11 +1,9 @@
 <script setup lang="ts">
-import type { Connection, UntrustedCert } from "~/types"
+import type { Connection } from "~/types"
 import { invoke } from "@tauri-apps/api/core"
 
 const isLoading = ref<boolean>(false)
 const searchFilter = ref<string>("")
-const cert = ref<UntrustedCert>()
-const connectionToLaunch = ref<Connection>()
 
 const servers: Connection[] = JSON.parse(await invoke("load_connections"))
 const filteredServers = computed(() =>
@@ -24,37 +22,41 @@ const mappedServers = computed(() =>
   Object.groupBy(filteredServers.value, ({ group }) => group),
 )
 
+const { trustCertificate } = useConfirmRejectModal()
 const handleLaunchClick = async (connection: Connection) => {
-  connectionToLaunch.value = connection
-  await launchServer()
-}
-
-const launchServer = async () => {
-  isLoading.value = true
-
   // FIXME This is a nasty hack to get the loading icon
+  isLoading.value = true
   setTimeout(async () => {
-    try {
-      const response: string = await invoke("launch", {
-        id: connectionToLaunch.value!!.id,
-      })
-      const result: any = JSON.parse(response)
-
-      if (result.code === 1) {
-        isLoading.value = false
-        cert.value = result.cert
-      }
-    } finally {
-      isLoading.value = false
-    }
+    await launchServer(connection)
   }, 100)
 }
 
-const trustCertAndLaunch = async () => {
-  const result = await invoke("trust_cert", { cert: cert.value.der })
-  cert.value = undefined
-  console.log(result)
-  await launchServer()
+const launchServer = async (connection: Connection) => {
+  isLoading.value = true
+
+  const response: string = await invoke("launch", {
+    id: connection.id,
+  })
+  const result: any = JSON.parse(response)
+
+  // Result code 1 means Admin was launched and all certs are trusted
+  if (result.code !== 1) {
+    isLoading.value = false
+    return
+  }
+
+  const shouldTrustCertificate = await trustCertificate(result.cert)
+
+  if (!shouldTrustCertificate) {
+    isLoading.value = false
+    return
+  }
+
+  await invoke("trust_cert", { cert: result.cert.der })
+
+  await launchServer(connection)
+
+  isLoading.value = false
 }
 
 const openSettings = (server: Connection) =>
@@ -77,20 +79,6 @@ const openSettings = (server: Connection) =>
         >
           Connecting...
         </p>
-      </div>
-    </Teleport>
-    <Teleport to="body">
-      <div
-        v-if="cert"
-        class="absolute top-0 left-0 h-screen w-screen z-100 flex justify-center items-center"
-      >
-        <span class="absolute h-full w-full opacity-25 bg-neutral-900"></span>
-        <trust-certificate-dialog
-          :cert="cert"
-          class="relative opacity-100"
-          @noClicked="cert = undefined"
-          @yesClicked="trustCertAndLaunch"
-        />
       </div>
     </Teleport>
 
