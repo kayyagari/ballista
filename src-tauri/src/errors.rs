@@ -5,6 +5,7 @@ use serde_json::{Number, Value};
 use std::collections::VecDeque;
 use std::fmt::{Display, Formatter};
 use std::io::Error;
+use openssl::hash::MessageDigest;
 use zip::result::ZipError;
 
 #[derive(Debug)]
@@ -31,6 +32,10 @@ impl VerificationError {
 
             let expires_on = cert.not_after().to_string();
             cert_details.insert("expires_on".to_string(), Value::String(expires_on));
+
+            let sha256_sum_bytes = cert.digest(MessageDigest::sha256()).expect("Failed to compute SHA-256");
+            let sha256_string = hex::encode(sha256_sum_bytes);
+            cert_details.insert("sha256sum".to_string(), Value::String(sha256_string));
 
             obj.insert("cert", Value::Object(cert_details));
         }

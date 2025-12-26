@@ -36,5 +36,6 @@ export interface UntrustedCert {
   der?: string
   subject?: string
   issuer?: string
-  expires_on?: string
+  expires_on?: string,
+  sha256sum: string,
 }

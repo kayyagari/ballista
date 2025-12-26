@@ -39,6 +39,11 @@ const emit = defineEmits(["confirm", "cancel"])
           {{ certificate.expires_on }}
         </p>
 
+        <p>
+          <b>SHA256 fingerprint:</b>
+          {{ certificate.sha256sum }}
+        </p>
+
         <p>Do you trust this certificate?</p>
 
         <div class="text-lg space-x-3 text-right">
