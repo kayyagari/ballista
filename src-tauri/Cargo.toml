@@ -1,6 +1,6 @@
 [package]
 name = "ballista"
-version = "0.6.0"
+version = "1.0.0"
 description = "A Mirth Connect Admin Client Launcher"
 authors = ["kiran@sereen.io"]
 homepage = "https://sereen.io"
