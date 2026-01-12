@@ -288,14 +288,14 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
             }
             let digest_ref = digest_ref.unwrap();
 
-            let mut computed_digest_output = [0; 32];
-
+            let mut computed_digest_output: Vec<u8> = vec![0; digest_ref.size()];
+            let computed_digest_output = computed_digest_output.as_mut_slice();
             // verify that the digests are same
             let mut ctx = openssl::md_ctx::MdCtx::new().unwrap();
             ctx.digest_init(digest_ref)?;
             ctx.digest_update(manifest_buf.as_slice())?;
-            ctx.digest_final(&mut computed_digest_output)?;
-            let computed_manifest_digest = openssl::base64::encode_block(&computed_digest_output);
+            ctx.digest_final(computed_digest_output)?;
+            let computed_manifest_digest = openssl::base64::encode_block(computed_digest_output);
             if &computed_manifest_digest != sf_manifest_digest {
                 return Err(VerificationError {
                     cert: None,
@@ -331,7 +331,7 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
                 }
                 f.read_to_end(&mut buf)?;
                 ctx.digest_update(buf.as_slice())?;
-                ctx.digest_final(&mut computed_digest_output)?;
+                ctx.digest_final(computed_digest_output)?;
 
                 let computed_digest = openssl::base64::encode_block(&computed_digest_output);
                 let (_m_alg, m_digest) = manifest
