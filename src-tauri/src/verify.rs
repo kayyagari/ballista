@@ -4,9 +4,8 @@ use std::iter::Peekable;
 
 use asn1_rs::{Any, DerSequence, FromDer, Sequence, Set};
 use openssl::cms::CMSOptions;
-use openssl::md::MdRef;
 use std::str::Chars;
-
+use openssl::hash::{Hasher, MessageDigest};
 use openssl::x509::store::X509StoreRef;
 use openssl::x509::X509;
 use rustc_hash::FxHashMap;
@@ -279,23 +278,21 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
             }
             let sf_manifest_digest = sf_manifest_digest.unwrap();
 
-            let digest_ref = get_digest_ref(&sig_digest_alg_name);
-            if let None = digest_ref {
+            let hasher = create_hasher_from_algorithm_str(&sig_digest_alg_name);
+            if let Err(e) = hasher {
                 return Err(VerificationError {
                     cert: None,
-                    msg: format!("unsupported digest algorithm {}", sig_digest_alg_name),
+                    msg: e,
                 });
             }
-            let digest_ref = digest_ref.unwrap();
 
-            let mut computed_digest_output = [0; 32];
+            let mut hasher = hasher.unwrap();
+            hasher.update(manifest_buf.as_slice())?;
 
-            // verify that the digests are same
-            let mut ctx = openssl::md_ctx::MdCtx::new().unwrap();
-            ctx.digest_init(digest_ref)?;
-            ctx.digest_update(manifest_buf.as_slice())?;
-            ctx.digest_final(&mut computed_digest_output)?;
+            let computed_digest_output = hasher.finish()?;
             let computed_manifest_digest = openssl::base64::encode_block(&computed_digest_output);
+
+            // verify that the digests are identical
             if &computed_manifest_digest != sf_manifest_digest {
                 return Err(VerificationError {
                     cert: None,
@@ -309,10 +306,8 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
             for (jar_entry_name, (jar_entry_digest_alg, _jar_entry_digest)) in
                 &sigmanifest.name_digests
             {
-                let mut ctx = openssl::md_ctx::MdCtx::new().unwrap();
-                ctx.digest_init(digest_ref)?;
-                let f = za.by_name(jar_entry_name);
-                if let Err(ref e) = f {
+                let zip_file = za.by_name(jar_entry_name);
+                if let Err(ref e) = zip_file {
                     println!(
                         "entry {} not found in {} {}",
                         jar_entry_name,
@@ -321,17 +316,18 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
                     );
                     continue;
                 }
-                let mut f = f.unwrap();
-                if f.is_dir() {
+                let mut zip_file = zip_file?;
+                if zip_file.is_dir() {
                     println!(
                         "entry {} of {} is a directory, skipping digest check",
                         jar_entry_name, file_path
                     );
                     continue;
                 }
-                f.read_to_end(&mut buf)?;
-                ctx.digest_update(buf.as_slice())?;
-                ctx.digest_final(&mut computed_digest_output)?;
+                zip_file.read_to_end(&mut buf)?;
+
+                hasher.update(buf.as_slice())?;
+                let computed_digest_output = hasher.finish()?;
 
                 let computed_digest = openssl::base64::encode_block(&computed_digest_output);
                 let (_m_alg, m_digest) = manifest
@@ -354,15 +350,15 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
     Ok(())
 }
 
-fn get_digest_ref(name: &str) -> Option<&MdRef> {
-    use openssl::md::Md;
-    match name {
-        "SHA-256" => Some(Md::sha256()),
-        "SHA-384" => Some(Md::sha384()),
-        "SHA-512" => Some(Md::sha512()),
-        _ => None,
+fn create_hasher_from_algorithm_str(algo: &str) -> Result<Hasher, String> {
+    match algo {
+        "SHA-256" => Ok(Hasher::new(MessageDigest::sha256()).map_err(|e| e.to_string())?),
+        "SHA-384" => Ok(Hasher::new(MessageDigest::sha384()).map_err(|e| e.to_string())?),
+        "SHA-512" => Ok(Hasher::new(MessageDigest::sha512()).map_err(|e| e.to_string())?),
+        _ => Err(format!("Unsupported algorithm: {}", algo)),
     }
 }
+
 fn extract_cert(sigblock: &[u8]) -> Result<Option<X509>, anyhow::Error> {
     let (_, ci) = ContentInfo::from_der(sigblock).unwrap();
     //println!("{:?}", ci);
