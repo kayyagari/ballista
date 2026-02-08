@@ -1,4 +1,3 @@
-use std::{env, io};
 use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -7,13 +6,13 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use anyhow::Error;
-use hex::encode;
 use openssl::x509::store::X509StoreRef;
 use reqwest::blocking::{Client, ClientBuilder};
 use reqwest::Url;
 use roxmltree::Node;
 use rustc_hash::FxHashMap;
 use sha2::{Digest, Sha256};
+use tauri::ipc::Channel;
 
 use crate::connection::ConnectionEntry;
 use crate::errors::VerificationError;
@@ -25,7 +24,6 @@ pub struct WebstartFile {
     main_class: String,
     args: Vec<String>,
     j2ses: Option<Vec<J2se>>,
-    //jars: Vec<Jar>,
     jar_dir: PathBuf,
     loaded_at: SystemTime,
 }
@@ -68,9 +66,10 @@ impl WebStartCache {
 }
 
 impl WebstartFile {
-    pub fn load(base_url: &str, cache_dir: &PathBuf, donotcache: bool) -> Result<WebstartFile, Error> {
+    pub fn load(base_url: &str, cache_dir: &PathBuf, donotcache: bool, on_progress: &Channel<serde_json::Value>) -> Result<WebstartFile, Error> {
         let (base_url, host) = normalize_url(base_url)?;
         let webstart = format!("{}/webstart.jnlp", base_url); // base_url will never contain a / at the end after normalization
+        let _ = on_progress.send(serde_json::json!({"message": "Fetching server configuration..."}));
         let cb = ClientBuilder::default()
             // in certain network environments client is failing with error message "connection closed before message completed"
             // disabling the pooling resolved the issue
@@ -81,8 +80,6 @@ impl WebstartFile {
 
         let r = client.get(&webstart).send()?;
         let data = r.text()?;
-        //TODO VERY NOISY, is there a log level lower than debug?
-        //println!("Got response from MC as: {:?}", data);
         let doc = roxmltree::Document::parse(&data)?;
 
         let root = doc.root();
@@ -119,7 +116,8 @@ impl WebstartFile {
         let mut j2ses = None;
         if let Some(resources_node) = resources_node {
             j2ses = get_j2ses(&resources_node);
-            download_jars(&resources_node, &client, dir_path, &base_url)?;
+            let mut counter = 0usize;
+            download_jars(&resources_node, &client, dir_path, &base_url, on_progress, &mut counter)?;
         }
 
         let loaded_at = SystemTime::now();
@@ -152,7 +150,6 @@ impl WebstartFile {
             //In Windows the CP separator is ';' and literally every other OS is ':'
             let classpath_separator = if cfg!(windows) { ';' } else { ':' };
 
-            //println!("{}", file_path);
             // MirthConnect's own jars contain some overridden classes
             // of the dependent libraries and hence must be loaded first
             // https://forums.mirthproject.io/forum/mirth-connect/support/15524-using-com-mirth-connect-client-core-client
@@ -168,7 +165,6 @@ impl WebstartFile {
 
         classpath.push_str(&classpath_suffix);
 
-        //println!("class path: {}", classpath);
         let mut cmd;
         let java_home = ce.java_home.trim();
         if java_home.is_empty() {
@@ -215,12 +211,59 @@ impl WebstartFile {
             }
         }
 
-        // inherit the parent's IO handles so that child's sysout and syserr messages can be seen on the terminal
-        cmd.stdout(Stdio::inherit());
-        cmd.stderr(Stdio::inherit());
-        //TODO noisy, should be a debug logger
-        //println!("Executing with: {:?}", cmd);
-        cmd.spawn()?;
+        if ce.show_console {
+            // Launch the Java Console as a separate Java Swing process
+            let java_bin = if java_home.is_empty() {
+                "java".to_string()
+            } else {
+                format!("{}/bin/java", java_home)
+            };
+
+            let console_jar = std::env::current_dir()
+                .unwrap_or_default()
+                .join("lib")
+                .join("java-console.jar");
+
+            let mut console_proc = Command::new(&java_bin)
+                .arg("-Xmx256m")
+                .arg("-cp")
+                .arg(console_jar.to_str().unwrap())
+                .arg("com.innovarhealthcare.launcher.JavaConsoleDialog")
+                .stdin(Stdio::piped())
+                .spawn()?;
+
+            // Launch the target process with stdout piped to the console
+            // stderr inherits (default) so it doesn't block the process
+            cmd.stdout(Stdio::piped());
+            let mut target_proc = cmd.spawn()?;
+
+            // Pipe target stdout → console stdin in a background thread
+            let target_stdout = target_proc.stdout.take();
+            let console_stdin = console_proc.stdin.take();
+            if let (Some(stdout), Some(stdin)) = (target_stdout, console_stdin) {
+                std::thread::spawn(move || {
+                    use std::io::{Read, Write};
+                    let mut stdout = stdout;
+                    let mut stdin = stdin;
+                    let mut buf = [0u8; 1024];
+                    loop {
+                        match stdout.read(&mut buf) {
+                            Ok(0) => break,
+                            Ok(n) => {
+                                let _ = stdin.write_all(&buf[..n]);
+                                let _ = stdin.flush();
+                            }
+                            Err(_) => break,
+                        }
+                    }
+                });
+            }
+        } else {
+            cmd.stdout(Stdio::inherit());
+            cmd.stderr(Stdio::inherit());
+            cmd.spawn()?;
+        }
+
         Ok(())
     }
 
@@ -253,6 +296,8 @@ fn download_jars(
     client: &Client,
     dir_path: &Path,
     base_url: &str,
+    on_progress: &Channel<serde_json::Value>,
+    counter: &mut usize,
 ) -> Result<(), Error> {
     for n in resources_node.children() {
         let jar = n.has_tag_name("jar");
@@ -268,15 +313,15 @@ fn download_jars(
 
         if jar {
             let file_name = get_file_name_from_path(href);
+            *counter += 1;
+            let _ = on_progress.send(serde_json::json!({
+                "message": format!("Downloading {} ({})", file_name, counter),
+            }));
             let jar_file_path = dir_path.join(file_name);
             if has_file_changed(&jar_file_path, hash_in_jnlp)? {
-                //println!("downloading file {}", file_name);
                 let mut resp = client.get(url).send()?;
                 let mut f = File::create(&jar_file_path)?;
                 resp.copy_to(&mut f)?;
-            }
-            else {
-                //println!("file {} is cached", file_name);
             }
         } else if extension {
             let r = client.get(url).send()?;
@@ -286,7 +331,7 @@ fn download_jars(
             let resources_node = get_node(&root, "resources");
             let ext_base_url = format!("{}/webstart/extensions", base_url);
             if let Some(resources_node) = resources_node {
-                download_jars(&resources_node, client, dir_path, &ext_base_url)?;
+                download_jars(&resources_node, client, dir_path, &ext_base_url, on_progress, counter)?;
             }
         }
     }

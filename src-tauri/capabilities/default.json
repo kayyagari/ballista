@@ -6,6 +6,7 @@
     "main"
   ],
   "permissions": [
+    "core:default",
     "dialog:default",
     "notification:default",
     "fs:default",

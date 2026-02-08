@@ -16,7 +16,7 @@ use std::process::Command;
 use std::sync::{Arc, Mutex};
 use uuid::Uuid;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ConnectionEntry {
     pub address: String,
     #[serde(rename = "heapSize")]
@@ -38,6 +38,10 @@ pub struct ConnectionEntry {
     pub notes: String,
     #[serde(default = "get_default_donotcache")]
     pub donotcache: bool,
+    #[serde(default, rename = "lastConnected")]
+    pub last_connected: Option<i64>,
+    #[serde(default, rename = "showConsole")]
+    pub show_console: bool,
 }
 
 pub struct ConnectionStore {
@@ -65,6 +69,8 @@ impl Default for ConnectionEntry {
             group: get_default_group(),
             notes: get_default_notes(),
             donotcache: get_default_donotcache(),
+            last_connected: None,
+            show_console: false,
         }
     }
 }
@@ -246,6 +252,23 @@ impl ConnectionStore {
             return Err(Error::new(e));
         }
         f.unwrap().write_all(val.as_bytes())?;
+        Ok(())
+    }
+
+    pub fn update_last_connected(&self, id: &str) -> Result<(), Error> {
+        let mut cache = self.con_cache.lock().unwrap();
+        if let Some(entry) = cache.get(id) {
+            let mut updated = (**entry).clone();
+            updated.last_connected = Some(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_millis() as i64,
+            );
+            cache.insert(id.to_string(), Arc::new(updated));
+        }
+        drop(cache);
+        self.write_connections_to_disk()?;
         Ok(())
     }
 

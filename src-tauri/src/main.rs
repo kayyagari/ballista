@@ -7,6 +7,7 @@ use std::process::exit;
 use std::sync::Arc;
 
 use serde_json::Number;
+use tauri::ipc::Channel;
 use tauri::State;
 
 use crate::connection::{ConnectionEntry, ConnectionStore};
@@ -30,38 +31,53 @@ async fn get_ballista_info() -> String {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn launch(id: &str, cs: State<ConnectionStore>, wc: State<WebStartCache>) -> String {
-    let ce = cs.get(id);
+async fn launch(id: String, on_progress: Channel<serde_json::Value>, cs: State<'_, ConnectionStore>, wc: State<'_, WebStartCache>) -> Result<String, String> {
+    let ce = cs.get(&id);
+    let cache_dir = cs.cache_dir.clone();
+    let cert_store = cs.get_cert_store();
     if let Some(ce) = ce {
-        let mut ws = wc.get(&ce.address);
+        let address = ce.address.clone();
+        let donotcache = ce.donotcache;
+        let verify = ce.verify;
+
+        let mut ws = wc.get(&address);
         if let None = ws {
-            let tmp = WebstartFile::load(&ce.address, &cs.cache_dir, ce.donotcache);
+            let tmp = tauri::async_runtime::spawn_blocking({
+                let on_progress = on_progress.clone();
+                let address = address.clone();
+                let cache_dir = cache_dir.clone();
+                move || WebstartFile::load(&address, &cache_dir, donotcache, &on_progress)
+            }).await.map_err(|e| e.to_string())?;
+
             if let Err(e) = tmp {
                 let msg = e.to_string();
                 println!("{}", msg);
-                return create_json_resp(-1, &msg);
+                return Ok(create_json_resp(-1, &msg));
             }
-
             ws = Some(Arc::new(tmp.unwrap()));
         }
         let ws = ws.unwrap();
-        if ce.verify {
-            let verification_status = ws.verify(cs.get_cert_store().as_ref());
+        if verify {
+            let _ = on_progress.send(serde_json::json!({"message": "Verifying jar signatures..."}));
+            let verification_status = ws.verify(cert_store.as_ref());
             if let Err(e) = verification_status {
                 let resp = e.to_json();
                 println!("{}", resp);
-                return resp;
+                return Ok(resp);
             }
         }
+        let _ = on_progress.send(serde_json::json!({"message": "Launching administrator..."}));
         let r = ws.run(ce);
         if let Err(e) = r {
             let msg = e.to_string();
             println!("{}", msg);
-            return create_json_resp(-1, &msg);
+            return Ok(create_json_resp(-1, &msg));
         }
+
+        let _ = cs.update_last_connected(&id);
     }
 
-    String::from("{\"code\": 0}")
+    Ok(String::from("{\"code\": 0}"))
 }
 
 #[tauri::command]
@@ -90,7 +106,6 @@ fn load_single_connection(cs: State<ConnectionStore>, connection_id: String) -> 
 #[tauri::command]
 fn save(ce: &str, cs: State<ConnectionStore>) -> String {
     let ce: serde_json::Result<ConnectionEntry> = serde_json::from_str(ce);
-    //println!("received connection data {:?}", ce);
     let r = cs.save(ce.expect("failed to deserialize the given ConnectionEntry"));
     if let Err(e) = r {
         return e.to_string();

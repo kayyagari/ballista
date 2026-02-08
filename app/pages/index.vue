@@ -1,119 +1,284 @@
 <script setup lang="ts">
 import type { Connection } from "~/types"
-import { invoke } from "@tauri-apps/api/core"
+import { LandingScreenServerStatus } from "~/enums"
+import { Channel, invoke } from "@tauri-apps/api/core"
+import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
+
+type SortMode = "group" | "name" | "lastConnected" | "status"
 
 const isLoading = ref<boolean>(false)
+const progressMessage = ref<string>("Connecting...")
 const searchFilter = ref<string>("")
+const selectedServerId = ref<string | null>(null)
+const sortBy = ref<SortMode>((localStorage.getItem("ballista-sort") as SortMode) || "group")
+const showSortMenu = ref(false)
+
+watch(sortBy, (v) => {
+  localStorage.setItem("ballista-sort", v)
+  showSortMenu.value = false
+})
 
 const servers: Connection[] = JSON.parse(await invoke("load_connections"))
+
+// Connectivity status tracking (lifted from BriefServerInfo)
+const serverStatuses = reactive<Record<string, LandingScreenServerStatus>>({})
+
+const checkConnectivity = async (server: Connection) => {
+  serverStatuses[server.id] = LandingScreenServerStatus.PENDING
+  try {
+    await tauriFetch(`${server.address}/api/system/info`, {
+      method: "GET",
+      danger: { acceptInvalidCerts: true, acceptInvalidHostnames: true },
+      connectTimeout: 2000,
+      headers: { "X-Requested-With": "Ballista" },
+    })
+    serverStatuses[server.id] = LandingScreenServerStatus.AVAILABLE
+  } catch {
+    serverStatuses[server.id] = LandingScreenServerStatus.UNAVAILABLE
+  }
+}
+
+onMounted(() => servers.forEach(checkConnectivity))
+
 const filteredServers = computed(() =>
   servers.filter((server) => {
     const search = searchFilter.value.toLowerCase()
-
     if (!search.length) return true
-
     const name = server.name.toLowerCase()
     const url = server.address.toLowerCase()
     return name.includes(search) || url.includes(search)
   }),
 )
 
+const sortedServers = computed(() => {
+  const list = [...filteredServers.value]
+  switch (sortBy.value) {
+    case "name":
+      return list.sort((a, b) => a.name.localeCompare(b.name))
+    case "lastConnected":
+      return list.sort((a, b) => (b.lastConnected ?? 0) - (a.lastConnected ?? 0))
+    case "status":
+      return list.sort((a, b) => {
+        const order = { [LandingScreenServerStatus.AVAILABLE]: 0, [LandingScreenServerStatus.PENDING]: 1, [LandingScreenServerStatus.UNAVAILABLE]: 2 }
+        return (order[serverStatuses[a.id] ?? 2] ?? 2) - (order[serverStatuses[b.id] ?? 2] ?? 2)
+      })
+    default:
+      return list
+  }
+})
+
+const isGrouped = computed(() => sortBy.value === "group")
+
 const mappedServers = computed(() =>
   Object.groupBy(filteredServers.value, ({ group }) => group),
 )
 
+const hasServers = computed(() => servers.length > 0)
+const hasResults = computed(() => filteredServers.value.length > 0)
+
 const { trustCertificate } = useConfirmRejectModal()
-const handleLaunchClick = async (connection: Connection) => {
-  // FIXME This is a nasty hack to get the loading icon
+const handleLaunchClick = (connection: Connection) => {
   isLoading.value = true
-  setTimeout(async () => {
-    await launchServer(connection)
-  }, 100)
+  progressMessage.value = "Connecting..."
+  nextTick(() => launchServer(connection))
 }
 
 const launchServer = async (connection: Connection) => {
-  isLoading.value = true
-
-  const response: string = await invoke("launch", {
-    id: connection.id,
-  })
-  const result: any = JSON.parse(response)
-
-  // Result code 1 means Admin was launched and all certs are trusted
-  if (result.code !== 1) {
-    isLoading.value = false
-    return
+  const onProgress = new Channel<{ message: string }>()
+  onProgress.onmessage = ({ message }) => {
+    progressMessage.value = message
   }
 
-  const shouldTrustCertificate = await trustCertificate(result.cert)
+  try {
+    const response: string = await invoke("launch", {
+      id: connection.id,
+      on_progress: onProgress,
+    })
+    const result = JSON.parse(response)
 
-  if (!shouldTrustCertificate) {
+    // Result code 1 means cert needs trust approval
+    if (result.code !== 1) return
+
+    const shouldTrustCertificate = await trustCertificate(result.cert)
+    if (!shouldTrustCertificate) return
+
+    await invoke("trust_cert", { cert: result.cert.der })
+    await launchServer(connection)
+  } catch (e) {
+    console.error("Launch failed:", e)
+  } finally {
     isLoading.value = false
-    return
   }
-
-  await invoke("trust_cert", { cert: result.cert.der })
-
-  await launchServer(connection)
-
-  isLoading.value = false
 }
 
 const openSettings = (server: Connection) =>
   navigateTo(`/connections/${server.id}`)
+
+const deselectAll = () => {
+  selectedServerId.value = null
+  showSortMenu.value = false
+}
 </script>
 
 <template>
-  <div
-    class="bg-[#faf9fa] px-10 py-5 flex flex-col justify-start gap-2 select-none"
-  >
-    <Teleport to="body">
-      <div
-        v-if="isLoading"
-        class="absolute top-0 left-0 h-screen w-screen z-100 flex justify-center items-center"
+  <div class="bg-surface-0 flex flex-col h-full select-none overflow-hidden">
+    <!-- Header -->
+    <div class="flex items-center justify-between px-5 pt-5 pb-3">
+      <h1 class="font-semibold text-lg text-text-primary">Ballista</h1>
+      <button
+        class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-accent text-white hover:bg-accent-hover hover:cursor-pointer transition-colors duration-100"
+        @click="navigateTo('/connections/new-connection')"
       >
-        <span class="absolute h-full w-full opacity-25 bg-neutral-900"></span>
-        <!--icon name="ph:circle-notch-bold" class="text-7xl text-teal-500 animate-spin" /-->
-        <p
-          class="relative opacity-100 bg-white rounded-lg px-5 py-4 text-5xl border-3 border-teal-500"
-        >
-          Connecting...
-        </p>
-      </div>
-    </Teleport>
-
-    <input
-      type="text"
-      placeholder="Search servers by name or IP..."
-      v-model="searchFilter"
-      class="bg-[#f7f9fa] border-1 border-border rounded-lg py-1 px-2 w-full"
-    />
-
-    <div
-      v-for="[group, servers] of Object.entries(mappedServers || {})"
-      :key="group"
-    >
-      <h1 class="space-x-2">
-        <icon name="ph:folder-open-bold" class="align-middle text-xl" />
-        <span class="font-bold align-middle">{{ group }}</span>
-      </h1>
-
-      <ol class="ml-5">
-        <li v-for="(server, serverIndex) in servers" :key="serverIndex">
-          <brief-server-info
-            @rowClicked="handleLaunchClick(server)"
-            @settingsClicked="openSettings(server)"
-            :server="server"
-          />
-        </li>
-      </ol>
+        <icon name="ph:plus-bold" class="text-xs" />
+        Add
+      </button>
     </div>
 
-    <button
-      class="absolute bottom-12 right-12 rounded-lg border-2 size-11 hover:shadow-2xl hover:border-teal-500 hover:text-teal-500 hover:cursor-pointer"
-      @click="navigateTo('/connections/new-connection')"
+    <!-- Search + Sort -->
+    <div class="flex items-center gap-2 px-5 pb-3">
+      <div class="relative flex-1">
+        <icon
+          name="ph:magnifying-glass"
+          class="absolute left-2.5 top-1/2 -translate-y-1/2 text-sm text-text-tertiary"
+        />
+        <input
+          type="text"
+          placeholder="Search servers..."
+          v-model="searchFilter"
+          class="w-full bg-surface-1 border border-border rounded-md py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-disabled outline-none transition-colors duration-100 focus:border-border-focus focus:ring-1 focus:ring-accent/30"
+        />
+      </div>
+      <div class="relative">
+        <button
+          @click="showSortMenu = !showSortMenu"
+          class="flex items-center justify-center size-8 rounded-md border border-border bg-surface-1 text-text-tertiary hover:text-text-primary hover:cursor-pointer transition-colors duration-100"
+          :class="showSortMenu ? 'border-border-focus text-text-primary' : ''"
+        >
+          <icon name="ph:sort-ascending" class="text-sm" />
+        </button>
+        <Transition
+          enter-active-class="transition duration-100 ease-out"
+          enter-from-class="opacity-0 scale-95"
+          enter-to-class="opacity-100 scale-100"
+          leave-active-class="transition duration-75 ease-in"
+          leave-from-class="opacity-100 scale-100"
+          leave-to-class="opacity-0 scale-95"
+        >
+          <div
+            v-if="showSortMenu"
+            class="absolute right-0 top-full mt-1 z-50 w-44 bg-surface-1 border border-border rounded-md shadow-lg py-1"
+          >
+            <button
+              v-for="option in ([
+                { value: 'group', label: 'Group', icon: 'ph:folders' },
+                { value: 'name', label: 'Name', icon: 'ph:sort-ascending' },
+                { value: 'lastConnected', label: 'Last connected', icon: 'ph:clock' },
+                { value: 'status', label: 'Status', icon: 'ph:circle-half' },
+              ] as const)"
+              :key="option.value"
+              @click="sortBy = option.value"
+              class="flex items-center gap-2 w-full px-3 py-1.5 text-xs hover:bg-surface-2 transition-colors duration-75 hover:cursor-pointer"
+              :class="sortBy === option.value ? 'text-accent' : 'text-text-secondary'"
+            >
+              <icon :name="option.icon" class="text-sm" />
+              {{ option.label }}
+              <icon v-if="sortBy === option.value" name="ph:check-bold" class="text-xs ml-auto" />
+            </button>
+          </div>
+        </Transition>
+      </div>
+    </div>
+
+    <!-- Server list -->
+    <div class="flex-1 overflow-y-auto px-5 pb-5" @click.self="deselectAll">
+      <!-- No servers empty state -->
+      <div
+        v-if="!hasServers"
+        class="flex flex-col items-center justify-center h-full text-center"
+      >
+        <icon name="ph:hard-drives" class="text-4xl text-text-disabled mb-3" />
+        <p class="font-medium text-text-secondary">No servers yet</p>
+        <p class="text-sm text-text-tertiary mt-1">Add a connection to get started.</p>
+        <button
+          class="mt-4 flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-accent text-white hover:bg-accent-hover hover:cursor-pointer transition-colors duration-100"
+          @click="navigateTo('/connections/new-connection')"
+        >
+          <icon name="ph:plus-bold" class="text-xs" />
+          Add Server
+        </button>
+      </div>
+
+      <!-- No search results empty state -->
+      <div
+        v-else-if="!hasResults"
+        class="flex flex-col items-center justify-center h-full text-center"
+      >
+        <icon name="ph:magnifying-glass" class="text-4xl text-text-disabled mb-3" />
+        <p class="font-medium text-text-secondary">No results</p>
+        <p class="text-sm text-text-tertiary mt-1">
+          No servers matching "{{ searchFilter }}"
+        </p>
+      </div>
+
+      <!-- Server groups (grouped mode) -->
+      <div v-else-if="isGrouped" class="space-y-4" @click.self="deselectAll">
+        <div
+          v-for="[group, groupServers] of Object.entries(mappedServers || {})"
+          :key="group"
+          @click.self="deselectAll"
+        >
+          <p class="text-xs font-medium text-text-tertiary uppercase tracking-wider px-2 mb-1">
+            {{ group }}
+          </p>
+
+          <div class="space-y-px">
+            <brief-server-info
+              v-for="server in groupServers"
+              :key="server.id"
+              :server="server"
+              :status="serverStatuses[server.id]"
+              :selected="selectedServerId === server.id"
+              @select="selectedServerId = server.id"
+              @launch="handleLaunchClick(server)"
+              @edit="openSettings(server)"
+            />
+          </div>
+        </div>
+      </div>
+
+      <!-- Flat sorted list -->
+      <div v-else class="space-y-px" @click.self="deselectAll">
+        <brief-server-info
+          v-for="server in sortedServers"
+          :key="server.id"
+          :server="server"
+          :status="serverStatuses[server.id]"
+          :selected="selectedServerId === server.id"
+          @select="selectedServerId = server.id"
+          @launch="handleLaunchClick(server)"
+          @edit="openSettings(server)"
+        />
+      </div>
+    </div>
+
+    <!-- Bottom status bar -->
+    <Transition
+      enter-active-class="transition duration-150 ease-out"
+      enter-from-class="translate-y-full opacity-0"
+      enter-to-class="translate-y-0 opacity-100"
+      leave-active-class="transition duration-100 ease-in"
+      leave-from-class="translate-y-0 opacity-100"
+      leave-to-class="translate-y-full opacity-0"
     >
-      <icon name="ph:plus-bold" class="align-middle text-xl" />
-    </button>
+      <div v-if="isLoading" class="flex-none border-t border-border bg-surface-1">
+        <div class="h-0.5 bg-surface-2 overflow-hidden">
+          <div class="h-full w-1/3 bg-accent rounded-full animate-[statusSlide_1.5s_ease-in-out_infinite]" />
+        </div>
+        <div class="flex items-center gap-2 px-4 py-2">
+          <icon name="ph:circle-notch-bold" class="text-sm text-accent animate-spin flex-none" />
+          <p class="text-xs text-text-secondary truncate">{{ progressMessage }}</p>
+        </div>
+      </div>
+    </Transition>
   </div>
 </template>
