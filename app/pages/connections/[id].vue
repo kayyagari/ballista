@@ -11,7 +11,6 @@ const isNewConnection = connectionId === "new-connection"
 const groups: string[] = await invoke<string[]>("get_all_groups")
 
 const isConnectionEdited = ref<boolean>(false)
-const showAdvanced = ref<boolean>(false)
 
 const serverObject: Connection =
   isNewConnection
@@ -67,24 +66,17 @@ const handleDelete = async () => {
 
     <!-- Scrollable form area -->
     <div class="flex-1 overflow-y-auto px-5 pb-24">
-      <form class="max-w-lg space-y-6" @submit.prevent>
-        <!-- Connection section -->
+      <form class="grid grid-cols-2 gap-x-8 gap-y-6" @submit.prevent>
+        <!-- Left column: Connection -->
         <section class="space-y-3">
           <h2 class="text-xs font-medium text-text-tertiary uppercase tracking-wider">Connection</h2>
           <connection-input type="text" label="Name" placeholder="My Server" v-model="server.name" />
           <connection-input type="text" label="Address" placeholder="https://hostname:8443" v-model="server.address" />
         </section>
 
-        <!-- Authentication section -->
+        <!-- Right column: Java -->
         <section class="space-y-3">
-          <h2 class="text-xs font-medium text-text-tertiary uppercase tracking-wider">Authentication</h2>
-          <connection-input type="text" label="Username" placeholder="admin" v-model="server.username" />
-          <connection-input type="password" label="Password" v-model="server.password" />
-        </section>
-
-        <!-- Java Configuration section -->
-        <section class="space-y-3">
-          <h2 class="text-xs font-medium text-text-tertiary uppercase tracking-wider">Java Configuration</h2>
+          <h2 class="text-xs font-medium text-text-tertiary uppercase tracking-wider">Configuration</h2>
           <connection-input type="text" label="Java Home" placeholder="/usr/lib/jvm/java-11" v-model="server.javaHome" />
           <div class="space-y-1">
             <label class="block text-sm font-medium text-text-secondary select-none">JVM Arguments</label>
@@ -96,54 +88,37 @@ const handleDelete = async () => {
           </div>
         </section>
 
-        <!-- Advanced toggle -->
-        <section>
-          <button
-            type="button"
-            class="flex items-center gap-2 text-sm text-text-secondary hover:text-text-primary transition-colors duration-100 hover:cursor-pointer select-none"
-            @click="showAdvanced = !showAdvanced"
-          >
-            <icon
-              name="ph:caret-right"
-              class="text-xs transition-transform duration-150"
-              :class="showAdvanced ? 'rotate-90' : ''"
-            />
-            Advanced Options
-          </button>
+        <!-- Left column: Authentication -->
+        <section class="space-y-3">
+          <h2 class="text-xs font-medium text-text-tertiary uppercase tracking-wider">Authentication</h2>
+          <connection-input type="text" label="Username" placeholder="admin" v-model="server.username" />
+          <connection-input type="password" label="Password" v-model="server.password" />
+        </section>
 
-          <Transition
-            enter-active-class="transition-all duration-150 ease-out overflow-hidden"
-            enter-from-class="max-h-0 opacity-0"
-            enter-to-class="max-h-96 opacity-100"
-            leave-active-class="transition-all duration-100 ease-in overflow-hidden"
-            leave-from-class="max-h-96 opacity-100"
-            leave-to-class="max-h-0 opacity-0"
-          >
-            <div v-if="showAdvanced" class="mt-3 space-y-3">
-              <div class="space-y-1">
-                <label class="block text-sm font-medium text-text-secondary select-none">Group</label>
-                <insertable-dropdown :options="groups" v-model="server.group" />
-              </div>
-
-              <connection-input type="text" label="Notes" placeholder="Optional notes" v-model="server.notes" />
-
-              <div class="space-y-2">
-                <p class="text-sm font-medium text-text-secondary select-none">Options</p>
-                <label class="flex items-center gap-2 text-sm text-text-primary hover:cursor-pointer select-none">
-                  <input type="checkbox" class="accent-accent" v-model="server.showConsole" />
-                  Show Java console
-                </label>
-                <label class="flex items-center gap-2 text-sm text-text-primary hover:cursor-pointer select-none">
-                  <input type="checkbox" class="accent-accent" v-model="server.donotcache" />
-                  Do not cache
-                </label>
-                <label class="flex items-center gap-2 text-sm text-text-primary hover:cursor-pointer select-none">
-                  <input type="checkbox" class="accent-accent" v-model="server.verify" />
-                  Verify JAR files
-                </label>
-              </div>
-            </div>
-          </Transition>
+        <!-- Right column: Group, Notes, Options -->
+        <section class="space-y-3">
+          <h2 class="text-xs font-medium text-text-tertiary uppercase tracking-wider">Organization</h2>
+          <div class="space-y-1">
+            <label class="block text-sm font-medium text-text-secondary select-none">Group</label>
+            <insertable-dropdown :options="groups" v-model="server.group" />
+          </div>
+          <connection-input type="text" label="Heap Size" placeholder="512m" v-model="server.heapSize" />
+          <connection-input type="text" label="Notes" placeholder="Optional notes" v-model="server.notes" />
+          <div class="space-y-2 pt-1">
+            <p class="text-sm font-medium text-text-secondary select-none">Options</p>
+            <label class="flex items-center gap-2 text-sm text-text-primary hover:cursor-pointer select-none">
+              <input type="checkbox" class="accent-accent" v-model="server.showConsole" />
+              Show Java console
+            </label>
+            <label class="flex items-center gap-2 text-sm text-text-primary hover:cursor-pointer select-none">
+              <input type="checkbox" class="accent-accent" v-model="server.donotcache" />
+              Do not cache
+            </label>
+            <label class="flex items-center gap-2 text-sm text-text-primary hover:cursor-pointer select-none">
+              <input type="checkbox" class="accent-accent" v-model="server.verify" />
+              Verify JAR files
+            </label>
+          </div>
         </section>
       </form>
     </div>

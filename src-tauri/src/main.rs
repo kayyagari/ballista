@@ -8,7 +8,7 @@ use std::sync::Arc;
 
 use serde_json::Number;
 use tauri::ipc::Channel;
-use tauri::State;
+use tauri::{AppHandle, Manager, State};
 
 use crate::connection::{ConnectionEntry, ConnectionStore};
 use crate::webstart::{WebStartCache, WebstartFile};
@@ -31,7 +31,7 @@ async fn get_ballista_info() -> String {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-async fn launch(id: String, on_progress: Channel<serde_json::Value>, cs: State<'_, ConnectionStore>, wc: State<'_, WebStartCache>) -> Result<String, String> {
+async fn launch(id: String, on_progress: Channel<serde_json::Value>, app: AppHandle, cs: State<'_, ConnectionStore>, wc: State<'_, WebStartCache>) -> Result<String, String> {
     let ce = cs.get(&id);
     let cache_dir = cs.cache_dir.clone();
     let cert_store = cs.get_cert_store();
@@ -67,7 +67,15 @@ async fn launch(id: String, on_progress: Channel<serde_json::Value>, cs: State<'
             }
         }
         let _ = on_progress.send(serde_json::json!({"message": "Launching administrator..."}));
-        let r = ws.run(ce);
+        let console_jar = if ce.show_console {
+            Some(app.path().resource_dir()
+                .map_err(|e| e.to_string())?
+                .join("lib")
+                .join("java-console.jar"))
+        } else {
+            None
+        };
+        let r = ws.run(ce, console_jar);
         if let Err(e) = r {
             let msg = e.to_string();
             println!("{}", msg);

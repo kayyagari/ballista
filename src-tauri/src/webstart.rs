@@ -133,7 +133,7 @@ impl WebstartFile {
         Ok(ws)
     }
 
-    pub fn run(&self, ce: Arc<ConnectionEntry>) -> Result<(), Error> {
+    pub fn run(&self, ce: Arc<ConnectionEntry>, console_jar: Option<PathBuf>) -> Result<(), Error> {
         let itr = self.jar_dir.read_dir()?;
         let mut classpath = String::with_capacity(1152);
         let mut classpath_suffix = String::with_capacity(1024);
@@ -212,17 +212,15 @@ impl WebstartFile {
         }
 
         if ce.show_console {
+            let console_jar = console_jar
+                .ok_or(Error::msg("Java console jar path not provided"))?;
+
             // Launch the Java Console as a separate Java Swing process
             let java_bin = if java_home.is_empty() {
                 "java".to_string()
             } else {
                 format!("{}/bin/java", java_home)
             };
-
-            let console_jar = std::env::current_dir()
-                .unwrap_or_default()
-                .join("lib")
-                .join("java-console.jar");
 
             let mut console_proc = Command::new(&java_bin)
                 .arg("-Xmx256m")
