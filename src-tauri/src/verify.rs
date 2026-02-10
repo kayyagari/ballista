@@ -237,30 +237,37 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef, trusted_certs: &[X
             let sigblock = sigblock.as_slice();
             let cert = extract_cert(sigblock)?;
 
+            // Check if the signing cert is already explicitly trusted by the user
+            let is_trusted = cert.as_ref().is_some_and(|c| {
+                trusted_certs.iter().any(|tc| tc.to_der().ok() == c.to_der().ok())
+            });
+
             // https://docs.oracle.com/en/java/javase/20/docs/specs/man/jarsigner.html
             // #1 Verify the signature of the .SF file.
             println!("verifying {} of {}", sf_name, file_path);
             let mut cms_info = openssl::cms::CmsContentInfo::from_der(sigblock)?;
+            // If cert is user-trusted, skip chain validation (slow/broken on Windows)
+            // but still verify the signature itself
+            let cms_opts = if is_trusted {
+                CMSOptions::NO_SIGNER_CERT_VERIFY
+            } else {
+                CMSOptions::empty()
+            };
             let r = cms_info.verify(
                 None,
                 Some(cert_store),
                 Some(sigmanifest_buf.as_slice()),
                 None,
-                CMSOptions::empty(),
+                cms_opts,
             );
             if let Err(e) = r {
                 let msg = e.to_string();
                 println!("verification error: {}", msg);
                 if !msg.contains("certificate purpose") { // could be <[unsupported|unsuitable] certificate purpose>
                     if msg.contains("cms_signerinfo_verify_cert") {
-                        // Check if this cert was explicitly trusted by the user
-                        let is_trusted = cert.as_ref().is_some_and(|c| {
-                            trusted_certs.iter().any(|tc| tc.to_der().ok() == c.to_der().ok())
-                        });
                         if !is_trusted {
                             return Err(VerificationError { cert, msg });
                         }
-                        println!("cert chain verification failed but cert is user-trusted, continuing");
                     } else {
                         return Err(VerificationError { cert: None, msg });
                     }
