@@ -238,6 +238,11 @@ impl ConnectionStore {
         t.clone()
     }
 
+    pub fn get_trusted_certs(&self) -> Vec<X509> {
+        let certs = parse_trusted_certs(&self.trusted_certs_location);
+        certs.into_values().collect()
+    }
+
     fn write_connections_to_disk(&self) -> Result<(), Error> {
         let c = self.con_cache.lock().unwrap();
         let val = serde_json::to_string_pretty(c.deref())?;

@@ -171,7 +171,7 @@ impl Manifest {
     }
 }
 
-pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), VerificationError> {
+pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef, trusted_certs: &[X509]) -> Result<(), VerificationError> {
     let f = File::open(file_path)?;
     let mut za = zip::ZipArchive::new(f)?;
 
@@ -252,11 +252,18 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef) -> Result<(), Veri
                 let msg = e.to_string();
                 println!("verification error: {}", msg);
                 if !msg.contains("certificate purpose") { // could be <[unsupported|unsuitable] certificate purpose>
-                    // FIXME find a better way to tell OpenSSL to not check the certificate extensions
                     if msg.contains("cms_signerinfo_verify_cert") {
-                        return Err(VerificationError { cert, msg });
+                        // Check if this cert was explicitly trusted by the user
+                        let is_trusted = cert.as_ref().is_some_and(|c| {
+                            trusted_certs.iter().any(|tc| tc.to_der().ok() == c.to_der().ok())
+                        });
+                        if !is_trusted {
+                            return Err(VerificationError { cert, msg });
+                        }
+                        println!("cert chain verification failed but cert is user-trusted, continuing");
+                    } else {
+                        return Err(VerificationError { cert: None, msg });
                     }
-                    return Err(VerificationError { cert: None, msg });
                 }
             }
 
@@ -500,16 +507,17 @@ mod tests {
         let jar_file = "test-resources/valid-signed.jar";
         let mut xb = X509StoreBuilder::new().unwrap();
         let store = xb.build();
-        let r = verify_jar(jar_file, store.as_ref());
+        let r = verify_jar(jar_file, store.as_ref(), &[]);
         println!("{:?}", r);
         assert!(r.is_err());
         let ve = r.err().unwrap();
         println!("{}", ve.to_json());
         let cert = ve.cert.unwrap();
+        let trusted = vec![cert.clone()];
         let mut xb = X509StoreBuilder::new().unwrap();
         xb.add_cert(cert).unwrap();
         let store = xb.build();
-        let r = verify_jar(jar_file, store.as_ref());
+        let r = verify_jar(jar_file, store.as_ref(), &trusted);
         println!("{:?}", r);
         assert!(r.is_ok());
     }
@@ -523,7 +531,7 @@ mod tests {
         let mut xb = X509StoreBuilder::new().unwrap();
         let store = xb.build();
         for f in files {
-            let r = verify_jar(f, store.as_ref());
+            let r = verify_jar(f, store.as_ref(), &[]);
             assert!(r.is_err());
         }
     }

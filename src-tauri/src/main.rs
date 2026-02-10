@@ -59,7 +59,8 @@ async fn launch(id: String, on_progress: Channel<serde_json::Value>, app: AppHan
         let ws = ws.unwrap();
         if verify {
             let _ = on_progress.send(serde_json::json!({"message": "Verifying jar signatures..."}));
-            let verification_status = ws.verify(cert_store.as_ref());
+            let trusted_certs = cs.get_trusted_certs();
+            let verification_status = ws.verify(cert_store.as_ref(), &trusted_certs);
             if let Err(e) = verification_status {
                 let resp = e.to_json();
                 println!("{}", resp);

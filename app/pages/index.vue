@@ -90,20 +90,22 @@ const launchServer = async (connection: Connection) => {
   }
 
   try {
-    const response: string = await invoke("launch", {
-      id: connection.id,
-      on_progress: onProgress,
-    })
-    const result = JSON.parse(response)
+    // Loop to handle multiple untrusted certs across different jars
+    while (true) {
+      const response: string = await invoke("launch", {
+        id: connection.id,
+        on_progress: onProgress,
+      })
+      const result = JSON.parse(response)
 
-    // Result code 1 means cert needs trust approval
-    if (result.code !== 1) return
+      // Result code 1 means cert needs trust approval
+      if (result.code !== 1) return
 
-    const shouldTrustCertificate = await trustCertificate(result.cert)
-    if (!shouldTrustCertificate) return
+      const shouldTrustCertificate = await trustCertificate(result.cert)
+      if (!shouldTrustCertificate) return
 
-    await invoke("trust_cert", { cert: result.cert.der })
-    await launchServer(connection)
+      await invoke("trust_cert", { cert: result.cert.der })
+    }
   } catch (e) {
     console.error("Launch failed:", e)
   } finally {

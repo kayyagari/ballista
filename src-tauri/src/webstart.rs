@@ -7,6 +7,7 @@ use std::time::SystemTime;
 
 use anyhow::Error;
 use openssl::x509::store::X509StoreRef;
+use openssl::x509::X509;
 use reqwest::blocking::{Client, ClientBuilder};
 use reqwest::Url;
 use roxmltree::Node;
@@ -265,7 +266,7 @@ impl WebstartFile {
         Ok(())
     }
 
-    pub fn verify(&self, cert_store: &X509StoreRef) -> Result<(), VerificationError> {
+    pub fn verify(&self, cert_store: &X509StoreRef, trusted_certs: &[X509]) -> Result<(), VerificationError> {
         let mut jar_files = Vec::with_capacity(128);
         let itr = self
             .jar_dir
@@ -283,7 +284,7 @@ impl WebstartFile {
         for jf in jar_files {
             let file_path = jf.as_os_str();
             let file_path = file_path.to_str().unwrap();
-            verify_jar(file_path, cert_store)?;
+            verify_jar(file_path, cert_store, trusted_certs)?;
         }
         Ok(())
     }
