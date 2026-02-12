@@ -255,6 +255,8 @@ impl WebstartFile {
                             Err(_) => break,
                         }
                     }
+                    // Target process exited — kill the console window
+                    let _ = console_proc.kill();
                 });
             }
         } else {
