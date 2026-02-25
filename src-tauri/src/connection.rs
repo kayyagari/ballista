@@ -87,12 +87,15 @@ impl ConnectionStore {
         let mut cache = HashMap::new();
         let data: serde_json::Result<HashMap<String, ConnectionEntry>> =
             serde_json::from_reader(con_location_file);
-        if let Ok(data) = data {
-            for (id, ce) in data {
-                cache.insert(id, Arc::new(ce));
+        match data {
+            Ok(data) => {
+                for (id, ce) in data {
+                    cache.insert(id, Arc::new(ce));
+                }
             }
-        } else {
-            println!("{}", data.err().unwrap().to_string());
+            Err(e) => {
+                println!("{}", e);
+            }
         }
 
         let trusted_certs_location = data_dir_path.join("ballista-trusted-certs.json");
@@ -118,11 +121,12 @@ impl ConnectionStore {
     }
 
     pub fn to_json_array_string(&self) -> String {
+        let cache = self.con_cache.lock().expect("connection cache lock poisoned");
         let mut sb = String::with_capacity(1024);
-        let len = self.con_cache.lock().unwrap().len();
+        let len = cache.len();
         sb.push('[');
-        for (pos, ce) in self.con_cache.lock().unwrap().values().enumerate() {
-            let c = serde_json::to_string(ce).expect("failed to serialize ConnectionEntry");
+        for (pos, ce) in cache.values().enumerate() {
+            let c = serde_json::to_string(ce).unwrap_or_default();
             sb.push_str(c.as_str());
             if pos + 1 < len {
                 sb.push(',');
@@ -134,7 +138,7 @@ impl ConnectionStore {
     }
 
     pub fn get(&self, id: &str) -> Option<Arc<ConnectionEntry>> {
-        let cs = self.con_cache.lock().unwrap();
+        let cs = self.con_cache.lock().expect("connection cache lock poisoned");
         let val = cs.get(id);
         if let Some(val) = val {
             return Some(Arc::clone(val));
@@ -177,7 +181,7 @@ impl ConnectionStore {
     }
 
     pub fn delete(&self, id: &str) -> Result<(), Error> {
-        self.con_cache.lock().unwrap().remove(id);
+        self.con_cache.lock().expect("connection cache lock poisoned").remove(id);
         self.write_connections_to_disk()?;
         Ok(())
     }
@@ -229,12 +233,12 @@ impl ConnectionStore {
         f.write_all(val.as_bytes())?;
 
         let new_store = create_cert_store(certs);
-        *self.cert_store.lock().unwrap() = Arc::new(new_store);
+        *self.cert_store.lock().expect("cert store lock poisoned") = Arc::new(new_store);
         Ok(())
     }
 
     pub fn get_cert_store(&self) -> Arc<X509Store> {
-        let t = self.cert_store.lock().unwrap();
+        let t = self.cert_store.lock().expect("cert store lock poisoned");
         t.clone()
     }
 
@@ -244,30 +248,30 @@ impl ConnectionStore {
     }
 
     fn write_connections_to_disk(&self) -> Result<(), Error> {
-        let c = self.con_cache.lock().unwrap();
+        let c = self.con_cache.lock().expect("connection cache lock poisoned");
         let val = serde_json::to_string_pretty(c.deref())?;
-        let f = OpenOptions::new()
+        let mut f = OpenOptions::new()
             .append(false)
             .create(true)
             .write(true)
             .truncate(true)
-            .open(&self.con_location);
-        if let Err(e) = f {
-            println!("unable to open file for writing: {}", e.to_string());
-            return Err(Error::new(e));
-        }
-        f.unwrap().write_all(val.as_bytes())?;
+            .open(&self.con_location)
+            .map_err(|e| {
+                println!("unable to open file for writing: {}", e);
+                Error::new(e)
+            })?;
+        f.write_all(val.as_bytes())?;
         Ok(())
     }
 
     pub fn update_last_connected(&self, id: &str) -> Result<(), Error> {
-        let mut cache = self.con_cache.lock().unwrap();
+        let mut cache = self.con_cache.lock().expect("connection cache lock poisoned");
         if let Some(entry) = cache.get(id) {
             let mut updated = (**entry).clone();
             updated.last_connected = Some(
                 std::time::SystemTime::now()
                     .duration_since(std::time::UNIX_EPOCH)
-                    .unwrap()
+                    .expect("system clock is before UNIX epoch")
                     .as_millis() as i64,
             );
             cache.insert(id.to_string(), Arc::new(updated));
@@ -301,8 +305,12 @@ impl ConnectionStore {
 pub fn find_java_home() -> String {
     let mut java_home = String::from("");
     if let Some(jh) = OS_ENV.var_os("JAVA_HOME") {
-        java_home = String::from(jh.to_str().unwrap());
-        println!("JAVA_HOME is set to {}", java_home);
+        if let Some(jh_str) = jh.to_str() {
+            java_home = String::from(jh_str);
+            println!("JAVA_HOME is set to {}", java_home);
+        } else {
+            println!("JAVA_HOME contains non-UTF-8 characters, ignoring");
+        }
     }
 
     if java_home.is_empty() {
@@ -311,9 +319,15 @@ pub fn find_java_home() -> String {
             .output();
         if let Ok(out) = out {
             if out.status.success() {
-                java_home = String::from_utf8(out.stdout)
-                    .expect("failed to create UTF-8 string from OsStr");
-                println!("/usr/libexec/java_home -v 1.8 returned {}", java_home);
+                match String::from_utf8(out.stdout) {
+                    Ok(jh) => {
+                        println!("/usr/libexec/java_home -v 1.8 returned {}", jh);
+                        java_home = jh;
+                    }
+                    Err(e) => {
+                        println!("java_home output was not valid UTF-8: {}", e);
+                    }
+                }
             }
         }
     }

@@ -47,11 +47,11 @@ impl WebStartCache {
     }
 
     pub fn put(&mut self, wf: Arc<WebstartFile>) {
-        self.cache.lock().unwrap().insert(wf.url.clone(), wf);
+        self.cache.lock().expect("webstart cache lock poisoned").insert(wf.url.clone(), wf);
     }
 
     pub fn get(&self, url: &str) -> Option<Arc<WebstartFile>> {
-        let cache = self.cache.lock().unwrap();
+        let cache = self.cache.lock().expect("webstart cache lock poisoned");
         let wf = cache.get(url);
         if let Some(wf) = wf {
             let now = SystemTime::now();
@@ -140,13 +140,18 @@ impl WebstartFile {
         let mut classpath_suffix = String::with_capacity(1024);
         for e in itr {
             let e = e?;
-            if e.metadata().unwrap().is_dir() {
+            if e.metadata()?.is_dir() {
                 continue;
             }
             let file_path = e.path();
-            let file_name = file_path.file_name().unwrap();
-            let file_path = file_path.as_os_str();
-            let file_path = file_path.to_str().unwrap();
+            let file_name = match file_path.file_name().and_then(|f| f.to_str()) {
+                Some(name) => name.to_string(),
+                None => continue,
+            };
+            let file_path_str = match file_path.to_str() {
+                Some(p) => p,
+                None => continue,
+            };
 
             //In Windows the CP separator is ';' and literally every other OS is ':'
             let classpath_separator = if cfg!(windows) { ';' } else { ':' };
@@ -155,11 +160,11 @@ impl WebstartFile {
             // of the dependent libraries and hence must be loaded first
             // https://forums.mirthproject.io/forum/mirth-connect/support/15524-using-com-mirth-connect-client-core-client
             //TODO this should probably build the classpath objects as an ordered set, then do a .join(classpath_separator)
-            if file_name.to_str().unwrap().starts_with("mirth") {
-                classpath.push_str(file_path);
+            if file_name.starts_with("mirth") {
+                classpath.push_str(file_path_str);
                 classpath.push(classpath_separator);
             } else {
-                classpath_suffix.push_str(file_path);
+                classpath_suffix.push_str(file_path_str);
                 classpath_suffix.push(classpath_separator);
             }
         }
@@ -226,7 +231,7 @@ impl WebstartFile {
             let mut console_proc = Command::new(&java_bin)
                 .arg("-Xmx256m")
                 .arg("-cp")
-                .arg(console_jar.to_str().unwrap())
+                .arg(console_jar.to_str().ok_or_else(|| Error::msg("console jar path is not valid UTF-8"))?)
                 .arg("com.innovarhealthcare.launcher.JavaConsoleDialog")
                 .stdin(Stdio::piped())
                 .spawn()?;
@@ -273,9 +278,15 @@ impl WebstartFile {
         let itr = self
             .jar_dir
             .read_dir()
-            .expect("failed to read the jar files directory");
+            .map_err(|e| VerificationError {
+                cert: None,
+                msg: format!("failed to read jar files directory: {}", e),
+            })?;
         for e in itr {
-            let e = e.expect("failed to list a directory entry");
+            let e = e.map_err(|e| VerificationError {
+                cert: None,
+                msg: format!("failed to list directory entry: {}", e),
+            })?;
             let file_path = e.path();
             jar_files.push(file_path);
         }
@@ -284,8 +295,10 @@ impl WebstartFile {
         println!("{:?}", jar_files);
 
         for jf in jar_files {
-            let file_path = jf.as_os_str();
-            let file_path = file_path.to_str().unwrap();
+            let file_path = jf.to_str().ok_or_else(|| VerificationError {
+                cert: None,
+                msg: format!("jar file path is not valid UTF-8: {:?}", jf),
+            })?;
             verify_jar(file_path, cert_store, trusted_certs)?;
         }
         Ok(())
@@ -308,7 +321,10 @@ fn download_jars(
             continue;
         }
 
-        let href = n.attribute("href").unwrap();
+        let href = match n.attribute("href") {
+            Some(h) => h,
+            None => continue,
+        };
         let hash_in_jnlp = n.attribute("sha256");
         let url = format!("{}/{}", base_url, href);
 
@@ -341,15 +357,16 @@ fn download_jars(
 }
 
 fn get_file_name_from_path(p: &str) -> &str {
-    let mut itr = p.rsplit_terminator("/");
-    itr.next().unwrap()
+    p.rsplit('/').next().unwrap_or(p)
 }
 
 fn get_client_args(root: &Node) -> Vec<String> {
     let mut args = Vec::new();
     for n in root.descendants() {
         if n.has_tag_name("argument") {
-            args.push(n.text().unwrap().to_string());
+            if let Some(text) = n.text() {
+                args.push(text.to_string());
+            }
         }
     }
     args

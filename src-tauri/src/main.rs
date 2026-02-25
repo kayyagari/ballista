@@ -27,7 +27,7 @@ async fn get_ballista_info() -> String {
         "ballista_version".to_string(),
         serde_json::Value::String(String::from(APP_VERSION)),
     );
-    return serde_json::to_string(&obj).unwrap();
+    return serde_json::to_string(&obj).unwrap_or_default();
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -49,14 +49,18 @@ async fn launch(id: String, on_progress: Channel<serde_json::Value>, app: AppHan
                 move || WebstartFile::load(&address, &cache_dir, donotcache, &on_progress)
             }).await.map_err(|e| e.to_string())?;
 
-            if let Err(e) = tmp {
-                let msg = e.to_string();
-                println!("{}", msg);
-                return Ok(create_json_resp(-1, &msg));
+            match tmp {
+                Err(e) => {
+                    let msg = e.to_string();
+                    println!("{}", msg);
+                    return Ok(create_json_resp(-1, &msg));
+                }
+                Ok(wf) => {
+                    ws = Some(Arc::new(wf));
+                }
             }
-            ws = Some(Arc::new(tmp.unwrap()));
         }
-        let ws = ws.unwrap();
+        let ws = ws.expect("WebstartFile should be loaded at this point");
         if verify {
             let _ = on_progress.send(serde_json::json!({"message": "Verifying jar signatures..."}));
             let trusted_certs = cs.get_trusted_certs();
@@ -97,7 +101,7 @@ fn get_default_connectionentry(cs: State<ConnectionStore>) -> Result<serde_json:
 
 #[tauri::command]
 fn get_all_groups(cs: State<ConnectionStore>) -> Result<serde_json::Value, String> {
-    let groups = cs.get_all_groups().unwrap();
+    let groups = cs.get_all_groups().map_err(|e| e.to_string())?;
     Ok(serde_json::json!(groups))
 }
 
@@ -108,19 +112,21 @@ fn load_connections(cs: State<ConnectionStore>) -> String {
 
 #[tauri::command]
 fn load_single_connection(cs: State<ConnectionStore>, connection_id: String) -> Result<serde_json::Value, String> {
-    let connection_entry = cs.get(connection_id.as_str()).unwrap();
+    let connection_entry = cs.get(connection_id.as_str())
+        .ok_or_else(|| format!("connection not found: {}", connection_id))?;
     Ok(serde_json::json!(connection_entry))
 }
 
 #[tauri::command]
 fn save(ce: &str, cs: State<ConnectionStore>) -> String {
-    let ce: serde_json::Result<ConnectionEntry> = serde_json::from_str(ce);
-    let r = cs.save(ce.expect("failed to deserialize the given ConnectionEntry"));
-    if let Err(e) = r {
-        return e.to_string();
+    let ce: ConnectionEntry = match serde_json::from_str(ce) {
+        Ok(ce) => ce,
+        Err(e) => return format!("failed to deserialize ConnectionEntry: {}", e),
+    };
+    match cs.save(ce) {
+        Ok(data) => data,
+        Err(e) => e.to_string(),
     }
-
-    r.unwrap()
 }
 
 #[tauri::command]
@@ -134,14 +140,14 @@ fn delete(id: &str, cs: State<ConnectionStore>) -> String {
 
 #[tauri::command(rename_all = "snake_case")]
 fn import(file_path: &str, cs: State<ConnectionStore>) -> String {
-    let r = cs.import(file_path);
-    if let Err(e) = r {
-        let msg = e.to_string();
-        println!("{}", msg);
-        return msg;
+    match cs.import(file_path) {
+        Ok(data) => data,
+        Err(e) => {
+            let msg = e.to_string();
+            println!("{}", msg);
+            msg
+        }
     }
-
-    r.unwrap()
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -188,7 +194,7 @@ fn main() {
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .plugin(tauri_plugin_http::init())
         .plugin(tauri_plugin_shell::init())
-        .manage(connection_store.unwrap())
+        .manage(connection_store.expect("ConnectionStore init was checked above"))
         .manage(webcache)
         .invoke_handler(tauri::generate_handler![
             launch,
@@ -216,7 +222,7 @@ fn create_json_resp(code: i32, msg: &str) -> String {
         "msg".to_string(),
         serde_json::Value::String(String::from(msg)),
     );
-    serde_json::to_string(&obj).unwrap()
+    serde_json::to_string(&obj).unwrap_or_default()
 }
 
 fn move_file(old: PathBuf, new: PathBuf) {

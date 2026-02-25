@@ -61,28 +61,25 @@ impl Manifest {
 
         loop {
             let l = Manifest::read_line(&mut buf);
-            if let None = l {
+            if l.is_none() {
                 break;
             }
 
             let kv = Manifest::get_key_val(&l);
-            if let None = kv {
+            let Some((k, v)) = kv else {
                 continue;
-            }
+            };
 
-            let (k, v) = kv.unwrap();
             if k == "Name" {
                 loop {
                     // until XXX-Digest key is found
                     let next_line = Manifest::read_line(&mut buf);
-                    if let None = next_line {
+                    if next_line.is_none() {
                         break;
                     }
-                    let next_kv = Manifest::get_key_val(&next_line);
-                    if let None = next_kv {
+                    let Some((key, value)) = Manifest::get_key_val(&next_line) else {
                         break; // a newline encountered and there is no XXX-Digest value for this Name
-                    }
-                    let (key, value) = next_kv.unwrap();
+                    };
                     if key.ends_with(DIGEST_KEY_SUFFIX) {
                         let alg = key.replace(DIGEST_KEY_SUFFIX, "");
                         let digest = value.trim().to_string();
@@ -111,11 +108,9 @@ impl Manifest {
         let mut line = String::with_capacity(128);
         let space = &' ';
         loop {
-            let char = buf.next();
-            if let None = char {
+            let Some(char) = buf.next() else {
                 return None;
-            }
-            let char = char.unwrap();
+            };
             match char {
                 '\n' => {
                     let next = buf.peek();
@@ -154,20 +149,16 @@ impl Manifest {
     }
 
     fn get_key_val(line: &Option<String>) -> Option<(&str, &str)> {
-        if let None = line {
-            return None;
-        }
-
-        let line = line.as_ref().unwrap();
+        let line = line.as_ref()?;
         if line.is_empty() {
             return None;
         }
 
         let mut tokens = line.splitn(2, ":");
-        let k = tokens.next().or(Some(""));
-        let v = tokens.next().or(Some(""));
+        let k = tokens.next().unwrap_or("");
+        let v = tokens.next().unwrap_or("");
 
-        Some((k.unwrap(), v.unwrap()))
+        Some((k, v))
     }
 }
 
@@ -275,37 +266,26 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef, trusted_certs: &[X
             }
 
             // #2 Verify the digest listed in each entry in the .SF file with each corresponding section in the manifest.
-            if let None = sigmanifest.digest_alg_name {
-                return Err(VerificationError {
-                    cert: None,
-                    msg: String::from("missing XXX-Digest-Manifest attribute"),
-                });
-            }
+            let sig_digest_alg_name = sigmanifest.digest_alg_name.ok_or_else(|| VerificationError {
+                cert: None,
+                msg: String::from("missing XXX-Digest-Manifest attribute"),
+            })?;
 
-            let sig_digest_alg_name = sigmanifest.digest_alg_name.unwrap();
             let key = format!("{}{}", sig_digest_alg_name, DIGEST_MANIFEST_SUFFIX);
-            let sf_manifest_digest = sigmanifest.main_attribs.get(&key);
-            if let None = sf_manifest_digest {
-                return Err(VerificationError {
-                    cert: None,
-                    msg: format!("attribute {} not found in {}", key, sf_name),
-                });
-            }
-            let sf_manifest_digest = sf_manifest_digest.unwrap();
+            let sf_manifest_digest = sigmanifest.main_attribs.get(&key).ok_or_else(|| VerificationError {
+                cert: None,
+                msg: format!("attribute {} not found in {}", key, sf_name),
+            })?;
 
-            let digest_ref = get_digest_ref(&sig_digest_alg_name);
-            if let None = digest_ref {
-                return Err(VerificationError {
-                    cert: None,
-                    msg: format!("unsupported digest algorithm {}", sig_digest_alg_name),
-                });
-            }
-            let digest_ref = digest_ref.unwrap();
+            let digest_ref = get_digest_ref(&sig_digest_alg_name).ok_or_else(|| VerificationError {
+                cert: None,
+                msg: format!("unsupported digest algorithm {}", sig_digest_alg_name),
+            })?;
 
             let mut computed_digest_output: Vec<u8> = vec![0; digest_ref.size()];
             let computed_digest_output = computed_digest_output.as_mut_slice();
             // verify that the digests are same
-            let mut ctx = openssl::md_ctx::MdCtx::new().unwrap();
+            let mut ctx = openssl::md_ctx::MdCtx::new()?;
             ctx.digest_init(digest_ref)?;
             ctx.digest_update(manifest_buf.as_slice())?;
             ctx.digest_final(computed_digest_output)?;
@@ -323,27 +303,28 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef, trusted_certs: &[X
             for (jar_entry_name, (jar_entry_digest_alg, _jar_entry_digest)) in
                 &sigmanifest.name_digests
             {
-                let mut ctx = openssl::md_ctx::MdCtx::new().unwrap();
+                let mut ctx = openssl::md_ctx::MdCtx::new()?;
                 ctx.digest_init(digest_ref)?;
                 let f = za.by_name(jar_entry_name);
-                if let Err(ref e) = f {
-                    println!(
-                        "entry {} not found in {} {}",
-                        jar_entry_name,
-                        file_path,
-                        e.to_string()
-                    );
-                    continue;
+                match f {
+                    Err(e) => {
+                        println!(
+                            "entry {} not found in {} {}",
+                            jar_entry_name, file_path, e
+                        );
+                        continue;
+                    }
+                    Ok(mut f) => {
+                        if f.is_dir() {
+                            println!(
+                                "entry {} of {} is a directory, skipping digest check",
+                                jar_entry_name, file_path
+                            );
+                            continue;
+                        }
+                        f.read_to_end(&mut buf)?;
+                    }
                 }
-                let mut f = f.unwrap();
-                if f.is_dir() {
-                    println!(
-                        "entry {} of {} is a directory, skipping digest check",
-                        jar_entry_name, file_path
-                    );
-                    continue;
-                }
-                f.read_to_end(&mut buf)?;
                 ctx.digest_update(buf.as_slice())?;
                 ctx.digest_final(computed_digest_output)?;
 
@@ -351,8 +332,10 @@ pub fn verify_jar(file_path: &str, cert_store: &X509StoreRef, trusted_certs: &[X
                 let (_m_alg, m_digest) = manifest
                     .name_digests
                     .get(jar_entry_name)
-                    .expect("missing MANIFEST entry"); // safe to unwrap
-                                                       //println!("comparing digests [{} === {}] for {}", m_digest, computed_digest, jar_entry_name);
+                    .ok_or_else(|| VerificationError {
+                        cert: None,
+                        msg: format!("missing MANIFEST entry for {}", jar_entry_name),
+                    })?;
                 if m_digest != &computed_digest {
                     let msg = format!(
                         "{} digest mismatch(manifest={} != computed={}) for {} in {}",
@@ -378,7 +361,8 @@ fn get_digest_ref(name: &str) -> Option<&MdRef> {
     }
 }
 fn extract_cert(sigblock: &[u8]) -> Result<Option<X509>, anyhow::Error> {
-    let (_, ci) = ContentInfo::from_der(sigblock).unwrap();
+    let (_, ci) = ContentInfo::from_der(sigblock)
+        .map_err(|e| anyhow::anyhow!("failed to parse DER content info: {}", e))?;
     //println!("{:?}", ci);
     if let Some(cert_set) = ci.signed_data.certificates {
         let cert = X509::from_der(cert_set.content.as_ref())?;
