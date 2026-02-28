@@ -1,3 +1,7 @@
+// Copyright (c) Kiran Ayyagari. All rights reserved.
+// Copyright (c) Diridium Technologies Inc. All rights reserved.
+// Licensed under the MPL-2.0 License. See LICENSE file in the project root.
+
 // Prevents additional console window on Windows in release, DO NOT REMOVE!!
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 

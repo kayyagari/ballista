@@ -1,3 +1,6 @@
+// Copyright (c) Diridium Technologies Inc. All rights reserved.
+// Licensed under the MPL-2.0 License. See LICENSE file in the project root.
+
 import { createVNode, render } from "vue"
 import TrustCertModal from "~/components/TrustCertModal.vue"
 import type { UntrustedCert } from "~/types"

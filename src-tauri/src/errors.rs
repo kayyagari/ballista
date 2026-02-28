@@ -1,3 +1,7 @@
+// Copyright (c) Kiran Ayyagari. All rights reserved.
+// Copyright (c) Diridium Technologies Inc. All rights reserved.
+// Licensed under the MPL-2.0 License. See LICENSE file in the project root.
+
 use openssl::error::ErrorStack;
 use openssl::x509::{X509NameRef, X509};
 use rustc_hash::FxHashMap;

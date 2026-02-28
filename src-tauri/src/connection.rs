@@ -1,3 +1,7 @@
+// Copyright (c) Kiran Ayyagari. All rights reserved.
+// Copyright (c) Diridium Technologies Inc. All rights reserved.
+// Licensed under the MPL-2.0 License. See LICENSE file in the project root.
+
 use anyhow::Error;
 use home::env::Env;
 use home::env::OS_ENV;

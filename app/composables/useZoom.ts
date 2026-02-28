@@ -1,3 +1,6 @@
+// Copyright (c) Diridium Technologies Inc. All rights reserved.
+// Licensed under the MPL-2.0 License. See LICENSE file in the project root.
+
 import { ref, onMounted, onUnmounted } from "vue"
 import { getCurrentWebviewWindow } from "@tauri-apps/api/webviewWindow"
 

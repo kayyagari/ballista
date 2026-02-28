@@ -1,3 +1,7 @@
+// Copyright (c) Kiran Ayyagari. All rights reserved.
+// Copyright (c) Diridium Technologies Inc. All rights reserved.
+// Licensed under the MPL-2.0 License. See LICENSE file in the project root.
+
 use std::fs::File;
 use std::io::{read_to_string, Read};
 use std::iter::Peekable;
