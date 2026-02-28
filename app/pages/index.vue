@@ -8,6 +8,7 @@ type SortMode = "group" | "name" | "lastConnected" | "status"
 
 const isLoading = ref<boolean>(false)
 const progressMessage = ref<string>("Connecting...")
+const launchError = ref<string | null>(null)
 const searchFilter = ref<string>("")
 const selectedServerId = ref<string | null>(null)
 const sortBy = ref<SortMode>((localStorage.getItem("launcher-sort") as SortMode) || "group")
@@ -79,6 +80,7 @@ const hasResults = computed(() => filteredServers.value.length > 0)
 const { trustCertificate } = useConfirmRejectModal()
 const handleLaunchClick = (connection: Connection) => {
   isLoading.value = true
+  launchError.value = null
   progressMessage.value = "Connecting..."
   nextTick(() => launchServer(connection))
 }
@@ -107,7 +109,7 @@ const launchServer = async (connection: Connection) => {
       await invoke("trust_cert", { cert: result.cert.der })
     }
   } catch (e) {
-    console.error("Launch failed:", e)
+    launchError.value = `Launch failed: ${e}`
   } finally {
     isLoading.value = false
   }
@@ -279,6 +281,23 @@ const deselectAll = () => {
         <div class="flex items-center gap-2 px-4 py-2">
           <icon name="ph:circle-notch-bold" class="text-sm text-accent animate-spin flex-none" />
           <p class="text-xs text-text-secondary truncate">{{ progressMessage }}</p>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- Launch error -->
+    <Transition
+      enter-active-class="transition duration-150 ease-out"
+      enter-from-class="translate-y-full opacity-0"
+      enter-to-class="translate-y-0 opacity-100"
+      leave-active-class="transition duration-100 ease-in"
+      leave-from-class="translate-y-0 opacity-100"
+      leave-to-class="translate-y-full opacity-0"
+    >
+      <div v-if="launchError" class="absolute bottom-0 inset-x-0 bg-danger/10 border-t border-danger/30">
+        <div class="flex items-center justify-between px-4 py-2">
+          <p class="text-xs text-danger truncate">{{ launchError }}</p>
+          <button @click="launchError = null" class="text-xs text-danger hover:text-text-primary hover:cursor-pointer ml-2 flex-none">Dismiss</button>
         </div>
       </div>
     </Transition>

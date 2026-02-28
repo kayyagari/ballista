@@ -105,10 +105,6 @@ impl ConnectionStore {
         let trusted_certs_location = data_dir_path.join("launcher-trusted-certs.json");
         let certs = parse_trusted_certs(&trusted_certs_location);
         let cert_store = create_cert_store(certs);
-        // if let Err(e) = trusted_certs_location_file {
-        //     trusted_certs_location_file = File::create(&trusted_certs_location);
-        // }
-        // let trusted_certs_location_file = trusted_certs_location_file?;
 
         let cache_dir = data_dir_path.join("cache");
         if !cache_dir.exists() {
@@ -178,7 +174,7 @@ impl ConnectionStore {
         let data = serde_json::to_string(&ce)?;
         self.con_cache
             .lock()
-            .unwrap()
+            .expect("connection cache lock poisoned")
             .insert(ce.id.clone(), Arc::new(ce));
         self.write_connections_to_disk()?;
         Ok(data)
@@ -199,9 +195,9 @@ impl ConnectionStore {
             ce.java_home = java_home.clone();
             self.con_cache
                 .lock()
-                .unwrap()
+                .expect("connection cache lock poisoned")
                 .insert(ce.id.clone(), Arc::new(ce));
-            count = count + 1;
+            count += 1;
         }
 
         self.write_connections_to_disk()?;
@@ -288,7 +284,7 @@ impl ConnectionStore {
     pub fn get_all_groups(&self) -> Result<HashSet<String>, Error> {
         let connections = self.con_cache
             .lock()
-            .unwrap();
+            .expect("connection cache lock poisoned");
 
         let mut groups: HashSet<String> = HashSet::new();
 
@@ -382,7 +378,8 @@ fn parse_trusted_certs(trusted_certs_location: &PathBuf) -> FxHashMap<String, X5
 fn create_cert_store(certs: FxHashMap<String, X509>) -> X509Store {
     if !openssl_probe::has_ssl_cert_env_vars() {
         println!("probing and setting OpenSSL environment variables");
-        openssl_probe::init_ssl_cert_env_vars();
+        // SAFETY: must be called before any OpenSSL operations to set cert paths
+        unsafe { openssl_probe::init_openssl_env_vars(); }
     }
     let mut cert_store_builder =
         X509StoreBuilder::new().expect("unable to created X509 store builder");

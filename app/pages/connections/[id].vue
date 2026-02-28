@@ -27,9 +27,15 @@ watch(
   { deep: true },
 )
 
+const errorMessage = ref<string | null>(null)
+
 const handleSave = async () => {
-  await invoke("save", { ce: JSON.stringify(server.value) })
-  navigateTo("/")
+  try {
+    await invoke("save", { ce: JSON.stringify(server.value) })
+    navigateTo("/")
+  } catch (e) {
+    errorMessage.value = `Save failed: ${e}`
+  }
 }
 
 const handleCancel = async () => {
@@ -50,8 +56,12 @@ const handleDelete = async () => {
   )
   if (!confirmed) return
 
-  await invoke("delete", { id: server.value.id })
-  navigateTo("/")
+  try {
+    await invoke("delete", { id: server.value.id })
+    navigateTo("/")
+  } catch (e) {
+    errorMessage.value = `Delete failed: ${e}`
+  }
 }
 </script>
 
@@ -121,6 +131,11 @@ const handleDelete = async () => {
           </div>
         </section>
       </form>
+    </div>
+
+    <!-- Error message -->
+    <div v-if="errorMessage" class="flex-none px-5 py-2 bg-danger/10 border-t border-danger/30">
+      <p class="text-sm text-danger">{{ errorMessage }}</p>
     </div>
 
     <!-- Action bar -->

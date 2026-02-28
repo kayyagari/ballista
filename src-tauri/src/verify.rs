@@ -23,6 +23,7 @@ const DIGEST_MANIFEST_SUFFIX: &'static str = "-Digest-Manifest";
 
 /// https://docs.oracle.com/en/java/javase/17/docs/specs/jar/jar.html#jar-manifest
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct Manifest {
     file_name: String,
     digest_alg_name: Option<String>,
@@ -32,6 +33,7 @@ pub struct Manifest {
 
 /// https://datatracker.ietf.org/doc/html/rfc5652
 #[derive(Debug, DerSequence)]
+#[allow(dead_code)]
 pub struct ContentInfo<'a> {
     content_type: Any<'a>,
     #[tag_explicit(0)]
@@ -39,6 +41,7 @@ pub struct ContentInfo<'a> {
 }
 
 #[derive(Debug, DerSequence)]
+#[allow(dead_code)]
 pub struct SignedData<'a> {
     version: i32,
     digest_algorithms: Set<'a>,

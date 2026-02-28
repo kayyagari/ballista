@@ -19,7 +19,7 @@ const emit = defineEmits(["confirm", "cancel"])
       leave-to-class="opacity-0"
     >
       <div
-        class="fixed inset-0 z-100 flex items-center justify-center"
+        class="fixed inset-0 z-[100] flex items-center justify-center"
       >
         <div
           class="absolute inset-0 bg-black/30 backdrop-blur-sm"
@@ -28,8 +28,8 @@ const emit = defineEmits(["confirm", "cancel"])
 
         <div class="relative bg-surface-1 rounded-xl shadow-overlay w-full max-w-md mx-4 p-6 space-y-5">
           <div class="flex items-start gap-3">
-            <div class="flex-none flex items-center justify-center size-10 rounded-full bg-amber-50">
-              <icon name="ph:shield-warning" class="text-xl text-amber-600" />
+            <div class="flex-none flex items-center justify-center size-10 rounded-full bg-amber-900/30">
+              <icon name="ph:shield-warning" class="text-xl text-amber-400" />
             </div>
             <div>
               <h2 class="font-semibold text-text-primary">Untrusted Certificate</h2>

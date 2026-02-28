@@ -24,6 +24,7 @@ use crate::errors::VerificationError;
 use crate::verify::verify_jar;
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct WebstartFile {
     url: String,
     main_class: String,
@@ -48,10 +49,6 @@ impl WebStartCache {
     pub fn init() -> Self {
         let cache = Mutex::new(FxHashMap::default());
         WebStartCache { cache }
-    }
-
-    pub fn put(&mut self, wf: Arc<WebstartFile>) {
-        self.cache.lock().expect("webstart cache lock poisoned").insert(wf.url.clone(), wf);
     }
 
     pub fn get(&self, url: &str) -> Option<Arc<WebstartFile>> {
@@ -420,7 +417,7 @@ fn normalize_url(u: &str) -> Result<(String, String), Error> {
         .map_or("".to_string(), |p| format!(":{}", p));
     reconstructed_url.push_str(&port);
     reconstructed_url.push('/');
-    let mut path_parts = parsed_url.path().split_terminator("/");
+    let path_parts = parsed_url.path().split_terminator("/");
     for pp in path_parts {
         if !pp.is_empty() {
             reconstructed_url.push_str(pp);

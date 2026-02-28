@@ -36,69 +36,67 @@ async fn get_launcher_info() -> String {
 
 #[tauri::command(rename_all = "snake_case")]
 async fn launch(id: String, on_progress: Channel<serde_json::Value>, app: AppHandle, cs: State<'_, ConnectionStore>, wc: State<'_, WebStartCache>) -> Result<String, String> {
-    let ce = cs.get(&id);
+    let ce = cs.get(&id)
+        .ok_or_else(|| format!("connection not found: {}", id))?;
     let cache_dir = cs.cache_dir.clone();
     let cert_store = cs.get_cert_store();
-    if let Some(ce) = ce {
-        let address = ce.address.clone();
-        let donotcache = ce.donotcache;
-        let verify = ce.verify;
+    let address = ce.address.clone();
+    let donotcache = ce.donotcache;
+    let verify = ce.verify;
 
-        let mut ws = wc.get(&address);
-        if let None = ws {
-            let tmp = tauri::async_runtime::spawn_blocking({
-                let on_progress = on_progress.clone();
-                let address = address.clone();
-                let cache_dir = cache_dir.clone();
-                move || WebstartFile::load(&address, &cache_dir, donotcache, &on_progress)
-            }).await.map_err(|e| e.to_string())?;
+    let mut ws = wc.get(&address);
+    if ws.is_none() {
+        let tmp = tauri::async_runtime::spawn_blocking({
+            let on_progress = on_progress.clone();
+            let address = address.clone();
+            let cache_dir = cache_dir.clone();
+            move || WebstartFile::load(&address, &cache_dir, donotcache, &on_progress)
+        }).await.map_err(|e| e.to_string())?;
 
-            match tmp {
-                Err(e) => {
-                    let msg = e.to_string();
-                    println!("{}", msg);
-                    return Ok(create_json_resp(-1, &msg));
-                }
-                Ok(wf) => {
-                    ws = Some(Arc::new(wf));
-                }
+        match tmp {
+            Err(e) => {
+                let msg = e.to_string();
+                println!("{}", msg);
+                return Ok(create_json_resp(-1, &msg));
+            }
+            Ok(wf) => {
+                ws = Some(Arc::new(wf));
             }
         }
-        let ws = ws.expect("WebstartFile should be loaded at this point");
-        if verify {
-            let _ = on_progress.send(serde_json::json!({"message": "Verifying jar signatures..."}));
-            let trusted_certs = cs.get_trusted_certs();
-            let verification_status = ws.verify(cert_store.as_ref(), &trusted_certs);
-            if let Err(e) = verification_status {
-                let resp = e.to_json();
-                println!("{}", resp);
-                return Ok(resp);
-            }
+    }
+    let ws = ws.expect("WebstartFile should be loaded at this point");
+    if verify {
+        let _ = on_progress.send(serde_json::json!({"message": "Verifying jar signatures..."}));
+        let trusted_certs = cs.get_trusted_certs();
+        let verification_status = ws.verify(cert_store.as_ref(), &trusted_certs);
+        if let Err(e) = verification_status {
+            let resp = e.to_json();
+            println!("{}", resp);
+            return Ok(resp);
         }
-        let _ = on_progress.send(serde_json::json!({"message": "Launching administrator..."}));
-        let console_jar = if ce.show_console {
-            Some(app.path().resource_dir()
-                .map_err(|e| e.to_string())?
-                .join("lib")
-                .join("java-console.jar"))
-        } else {
-            None
-        };
-        let r = ws.run(ce, console_jar);
-        if let Err(e) = r {
-            let msg = e.to_string();
-            println!("{}", msg);
-            return Ok(create_json_resp(-1, &msg));
-        }
-
-        let _ = cs.update_last_connected(&id);
+    }
+    let _ = on_progress.send(serde_json::json!({"message": "Launching administrator..."}));
+    let console_jar = if ce.show_console {
+        Some(app.path().resource_dir()
+            .map_err(|e| e.to_string())?
+            .join("lib")
+            .join("java-console.jar"))
+    } else {
+        None
+    };
+    let r = ws.run(ce, console_jar);
+    if let Err(e) = r {
+        let msg = e.to_string();
+        println!("{}", msg);
+        return Ok(create_json_resp(-1, &msg));
     }
 
+    let _ = cs.update_last_connected(&id);
     Ok(String::from("{\"code\": 0}"))
 }
 
 #[tauri::command]
-fn get_default_connectionentry(cs: State<ConnectionStore>) -> Result<serde_json::Value, String> {
+fn get_default_connectionentry(_cs: State<ConnectionStore>) -> Result<serde_json::Value, String> {
     let connection_entry = ConnectionEntry::default();
     Ok(serde_json::json!(connection_entry))
 }
@@ -122,45 +120,27 @@ fn load_single_connection(cs: State<ConnectionStore>, connection_id: String) -> 
 }
 
 #[tauri::command]
-fn save(ce: &str, cs: State<ConnectionStore>) -> String {
-    let ce: ConnectionEntry = match serde_json::from_str(ce) {
-        Ok(ce) => ce,
-        Err(e) => return format!("failed to deserialize ConnectionEntry: {}", e),
-    };
-    match cs.save(ce) {
-        Ok(data) => data,
-        Err(e) => e.to_string(),
-    }
+fn save(ce: &str, cs: State<ConnectionStore>) -> Result<String, String> {
+    let ce: ConnectionEntry = serde_json::from_str(ce)
+        .map_err(|e| format!("failed to deserialize ConnectionEntry: {}", e))?;
+    cs.save(ce).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
-fn delete(id: &str, cs: State<ConnectionStore>) -> String {
-    let r = cs.delete(id);
-    if let Err(e) = r {
-        return e.to_string();
-    }
-    String::from("success")
+fn delete(id: &str, cs: State<ConnectionStore>) -> Result<String, String> {
+    cs.delete(id).map_err(|e| e.to_string())?;
+    Ok(String::from("success"))
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn import(file_path: &str, cs: State<ConnectionStore>) -> String {
-    match cs.import(file_path) {
-        Ok(data) => data,
-        Err(e) => {
-            let msg = e.to_string();
-            println!("{}", msg);
-            msg
-        }
-    }
+fn import(file_path: &str, cs: State<ConnectionStore>) -> Result<String, String> {
+    cs.import(file_path).map_err(|e| e.to_string())
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn trust_cert(cert: &str, cs: State<ConnectionStore>) -> String {
-    let r = cs.add_trusted_cert(cert);
-    if let Err(e) = r {
-        return e.to_string();
-    }
-    String::from("success")
+fn trust_cert(cert: &str, cs: State<ConnectionStore>) -> Result<String, String> {
+    cs.add_trusted_cert(cert).map_err(|e| e.to_string())?;
+    Ok(String::from("success"))
 }
 
 fn main() {
@@ -183,7 +163,12 @@ fn main() {
 
     // >= 2.1.0 migrate from .ballista to .launcher
     let launcher_directory = home_directory.join(".launcher");
-    let _ = fs::create_dir(&launcher_directory);
+    if let Err(e) = fs::create_dir(&launcher_directory) {
+        if e.kind() != std::io::ErrorKind::AlreadyExists {
+            println!("failed to create .launcher directory: {}", e);
+            exit(1);
+        }
+    }
     move_file(legacy_ballista_dir.join("ballista-data.json"), launcher_directory.join("launcher-data.json"));
     move_file(legacy_ballista_dir.join("ballista-trusted-certs.json"), launcher_directory.join("launcher-trusted-certs.json"));
 
