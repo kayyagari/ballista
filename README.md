@@ -25,7 +25,7 @@ Originally forked from [Ballista](https://github.com/kayyagari/ballista) by [Kir
 
 Follow the [Tauri prerequisites guide](https://tauri.app/start/prerequisites/) for your platform.
 
-A good reference for build steps is [`.github/workflows/build-ballista.yml`](.github/workflows/build-ballista.yml).
+A good reference for build steps is [`.github/workflows/build-launcher.yml`](.github/workflows/build-launcher.yml).
 
 ### Quick Start
 
