@@ -21,10 +21,10 @@ mod webstart;
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[tauri::command]
-async fn get_ballista_info() -> String {
+async fn get_launcher_info() -> String {
     let mut obj = serde_json::Map::new();
     obj.insert(
-        "ballista_version".to_string(),
+        "launcher_version".to_string(),
         serde_json::Value::String(String::from(APP_VERSION)),
     );
     return serde_json::to_string(&obj).unwrap_or_default();
@@ -166,18 +166,24 @@ fn main() {
     }
 
     let home_directory = home::home_dir().expect("unable to find the path to home directory");
-    // <= 0.2.0 migrate to a new app specific location
-    let ballista_directory = home_directory.join(".ballista");
-    let r = fs::create_dir(&ballista_directory);
+    // <= 0.2.0 migrate from loose files to .ballista directory
+    let legacy_ballista_dir = home_directory.join(".ballista");
+    let r = fs::create_dir(&legacy_ballista_dir);
     if let Ok(_) = r {
-        move_file(home_directory.join("catapult-data.json"), ballista_directory.join("ballista-data.json"));
+        move_file(home_directory.join("catapult-data.json"), legacy_ballista_dir.join("ballista-data.json"));
         move_file(
             home_directory.join("catapult-trusted-certs.json"),
-            ballista_directory.join("ballista-trusted-certs.json"),
+            legacy_ballista_dir.join("ballista-trusted-certs.json"),
         );
     }
 
-    let connection_store = ConnectionStore::init(ballista_directory);
+    // >= 2.1.0 migrate from .ballista to .launcher
+    let launcher_directory = home_directory.join(".launcher");
+    let _ = fs::create_dir(&launcher_directory);
+    move_file(legacy_ballista_dir.join("ballista-data.json"), launcher_directory.join("launcher-data.json"));
+    move_file(legacy_ballista_dir.join("ballista-trusted-certs.json"), launcher_directory.join("launcher-trusted-certs.json"));
+
+    let connection_store = ConnectionStore::init(launcher_directory);
     if let Err(e) = connection_store {
         println!("failed to initialize ConnectionStore: {}", e.to_string());
         exit(1);
@@ -206,7 +212,7 @@ fn main() {
             load_connections,
             load_single_connection,
             trust_cert,
-            get_ballista_info
+            get_launcher_info
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

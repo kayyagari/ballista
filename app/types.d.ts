@@ -1,5 +1,5 @@
-export interface BallistaInfo {
-  ballista_version: string
+export interface LauncherInfo {
+  launcher_version: string
 }
 
 export interface Connection {

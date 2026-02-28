@@ -10,11 +10,11 @@ const isLoading = ref<boolean>(false)
 const progressMessage = ref<string>("Connecting...")
 const searchFilter = ref<string>("")
 const selectedServerId = ref<string | null>(null)
-const sortBy = ref<SortMode>((localStorage.getItem("ballista-sort") as SortMode) || "group")
+const sortBy = ref<SortMode>((localStorage.getItem("launcher-sort") as SortMode) || "group")
 const showSortMenu = ref(false)
 
 watch(sortBy, (v) => {
-  localStorage.setItem("ballista-sort", v)
+  localStorage.setItem("launcher-sort", v)
   showSortMenu.value = false
 })
 
@@ -30,7 +30,7 @@ const checkConnectivity = async (server: Connection) => {
       method: "GET",
       danger: { acceptInvalidCerts: true, acceptInvalidHostnames: true },
       connectTimeout: 2000,
-      headers: { "X-Requested-With": "Ballista" },
+      headers: { "X-Requested-With": "Launcher" },
     })
     serverStatuses[server.id] = LandingScreenServerStatus.AVAILABLE
   } catch {
@@ -126,7 +126,7 @@ const deselectAll = () => {
   <div class="bg-surface-0 flex flex-col h-full select-none overflow-hidden">
     <!-- Header -->
     <div class="flex items-center justify-between px-5 pt-5 pb-3">
-      <h1 class="font-semibold text-lg text-text-primary">Ballista</h1>
+      <h1 class="font-semibold text-lg text-text-primary">Launcher</h1>
       <button
         class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-accent text-white hover:bg-accent-hover hover:cursor-pointer transition-colors duration-100"
         @click="navigateTo('/connections/new-connection')"

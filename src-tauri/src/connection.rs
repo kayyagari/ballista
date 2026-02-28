@@ -77,7 +77,7 @@ impl Default for ConnectionEntry {
 
 impl ConnectionStore {
     pub fn init(data_dir_path: PathBuf) -> Result<Self, Error> {
-        let con_location = data_dir_path.join("ballista-data.json");
+        let con_location = data_dir_path.join("launcher-data.json");
         let mut con_location_file = File::open(&con_location);
         if let Err(_e) = con_location_file {
             con_location_file = File::create(&con_location);
@@ -98,7 +98,7 @@ impl ConnectionStore {
             }
         }
 
-        let trusted_certs_location = data_dir_path.join("ballista-trusted-certs.json");
+        let trusted_certs_location = data_dir_path.join("launcher-trusted-certs.json");
         let certs = parse_trusted_certs(&trusted_certs_location);
         let cert_store = create_cert_store(certs);
         // if let Err(e) = trusted_certs_location_file {

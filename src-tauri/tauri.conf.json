@@ -18,15 +18,15 @@
       "lib/java-console.jar"
     ]
   },
-  "productName": "Ballista",
-  "mainBinaryName": "Ballista",
+  "productName": "Launcher",
+  "mainBinaryName": "Launcher",
   "identifier": "sereen.io",
   "plugins": {},
   "app": {
     "withGlobalTauri": false,
     "trayIcon": {
       "iconPath": "icons/icon.png",
-      "title": "Ballista"
+      "title": "Launcher"
     },
     "security": {
       "csp": null
@@ -35,7 +35,7 @@
       {
         "fullscreen": false,
         "resizable": true,
-        "title": "Ballista",
+        "title": "Launcher",
         "width": 900,
         "height": 600,
         "useHttpsScheme": true
