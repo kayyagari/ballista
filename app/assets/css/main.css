@@ -3,10 +3,10 @@
 /* ─── Design System Tokens ─── */
 @theme {
   /* Surface colors (dark slate) */
-  --color-surface-0: #1a1c23;
-  --color-surface-1: #22242b;
-  --color-surface-2: #2a2d36;
-  --color-surface-3: #33363f;
+  --color-surface-0: #24272e;
+  --color-surface-1: #2c2f37;
+  --color-surface-2: #353840;
+  --color-surface-3: #3e414a;
 
   /* Accent */
   --color-accent: #4f7df7;
@@ -28,7 +28,7 @@
   --color-danger-hover: #dc2626;
 
   /* Border */
-  --color-border: #2e3140;
+  --color-border: #3a3d4a;
   --color-border-focus: #4f7df7;
 
   /* Shadows */

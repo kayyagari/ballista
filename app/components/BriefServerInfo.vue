@@ -86,7 +86,7 @@ const currentStatus = computed(() => props.status ?? LandingScreenServerStatus.P
       </div>
     </section>
 
-    <div v-if="selected" class="flex-none flex items-center gap-1 ml-2">
+    <div class="flex-none flex items-center gap-1 ml-2">
       <button
         @click.stop="emit('launch')"
         class="flex items-center justify-center size-7 rounded-md hover:bg-surface-3 text-accent hover:text-accent-hover transition-all duration-100 hover:cursor-pointer"
