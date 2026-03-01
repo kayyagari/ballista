@@ -3,6 +3,7 @@ import type { Connection } from "~/types"
 import { LandingScreenServerStatus } from "~/enums"
 import { Channel, invoke } from "@tauri-apps/api/core"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
+import { ask, open } from "@tauri-apps/plugin-dialog"
 
 type SortMode = "group" | "name" | "lastConnected" | "status"
 
@@ -118,6 +119,30 @@ const launchServer = async (connection: Connection) => {
 const openSettings = (server: Connection) =>
   navigateTo(`/connections/${server.id}`)
 
+const importConnections = async () => {
+  const filePath = await open({
+    filters: [{ name: "JSON", extensions: ["json"] }],
+    multiple: false,
+  })
+  if (!filePath) return
+  try {
+    const resp: string = await invoke("import", { file_path: filePath, overwrite: false })
+    const result = JSON.parse(resp)
+    if (result.status === "duplicates") {
+      const names = result.names.join(", ")
+      const confirmed = await ask(
+        `${result.names.length} of ${result.total} connections already exist and will be overwritten:\n\n${names}`,
+        { title: "Overwrite existing connections?", kind: "warning" },
+      )
+      if (!confirmed) return
+      await invoke("import", { file_path: filePath, overwrite: true })
+    }
+    window.location.reload()
+  } catch (e) {
+    launchError.value = `Import failed: ${e}`
+  }
+}
+
 const deselectAll = () => {
   selectedServerId.value = null
   showSortMenu.value = false
@@ -129,13 +154,22 @@ const deselectAll = () => {
     <!-- Header -->
     <div class="flex items-center justify-between px-5 pt-5 pb-3">
       <h1 class="font-semibold text-lg text-text-primary">Launcher</h1>
-      <button
-        class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-accent text-white hover:bg-accent-hover hover:cursor-pointer transition-colors duration-100"
-        @click="navigateTo('/connections/new-connection')"
-      >
-        <icon name="ph:plus-bold" class="text-xs" />
-        Add
-      </button>
+      <div class="flex items-center gap-2">
+        <button
+          class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-border bg-surface-1 text-text-secondary hover:text-text-primary hover:bg-surface-2 hover:cursor-pointer transition-colors duration-100"
+          @click="importConnections"
+        >
+          <icon name="ph:download-simple-bold" class="text-xs" />
+          Import
+        </button>
+        <button
+          class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-accent text-white hover:bg-accent-hover hover:cursor-pointer transition-colors duration-100"
+          @click="navigateTo('/connections/new-connection')"
+        >
+          <icon name="ph:plus-bold" class="text-xs" />
+          Add
+        </button>
+      </div>
     </div>
 
     <!-- Search + Sort -->

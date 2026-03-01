@@ -186,9 +186,28 @@ impl ConnectionStore {
         Ok(())
     }
 
-    pub fn import(&self, file_path: &str) -> Result<String, Error> {
+    pub fn import(&self, file_path: &str, overwrite: bool) -> Result<String, Error> {
         let f = File::open(file_path)?;
         let data: Vec<ConnectionEntry> = serde_json::from_reader(f)?;
+
+        // Check for collisions with existing connections
+        let cache = self.con_cache.lock().expect("connection cache lock poisoned");
+        let duplicates: Vec<String> = data
+            .iter()
+            .filter(|ce| cache.contains_key(&ce.id))
+            .map(|ce| ce.name.clone())
+            .collect();
+        drop(cache);
+
+        if !duplicates.is_empty() && !overwrite {
+            let result = serde_json::json!({
+                "status": "duplicates",
+                "names": duplicates,
+                "total": data.len(),
+            });
+            return Ok(result.to_string());
+        }
+
         let mut count = 0;
         let java_home = find_java_home();
         for mut ce in data {
@@ -201,7 +220,11 @@ impl ConnectionStore {
         }
 
         self.write_connections_to_disk()?;
-        Ok(format!("imported {} connections", count))
+        let result = serde_json::json!({
+            "status": "ok",
+            "total": count,
+        });
+        Ok(result.to_string())
     }
 
     pub fn add_trusted_cert(&self, cert_der: &str) -> Result<(), Error> {

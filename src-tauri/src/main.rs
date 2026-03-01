@@ -133,8 +133,8 @@ fn delete(id: &str, cs: State<ConnectionStore>) -> Result<String, String> {
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn import(file_path: &str, cs: State<ConnectionStore>) -> Result<String, String> {
-    cs.import(file_path).map_err(|e| e.to_string())
+fn import(file_path: &str, overwrite: bool, cs: State<ConnectionStore>) -> Result<String, String> {
+    cs.import(file_path, overwrite).map_err(|e| e.to_string())
 }
 
 #[tauri::command(rename_all = "snake_case")]
