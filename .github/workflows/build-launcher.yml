@@ -76,7 +76,23 @@ jobs:
         with:
           tagName: ${{ github.ref_name }}
           releaseName: "Launcher v__VERSION__"
-          releaseBody: "See the assets to download and install this version."
+          releaseBody: |
+            See the assets below to download and install this version.
+
+            | File | Platform |
+            |------|----------|
+            | `Launcher___VERSION___universal.dmg` | macOS (Intel & Apple Silicon) |
+            | `Launcher_universal.app.tar.gz` | macOS app bundle (Intel & Apple Silicon) |
+            | `Launcher___VERSION___x64-setup.exe` | Windows x64 installer |
+            | `Launcher___VERSION___x64_en-US.msi` | Windows x64 MSI |
+            | `Launcher___VERSION___arm64-setup.exe` | Windows ARM64 installer |
+            | `Launcher___VERSION___arm64_en-US.msi` | Windows ARM64 MSI |
+            | `Launcher___VERSION___amd64.AppImage` | Linux x86_64 AppImage |
+            | `Launcher___VERSION___amd64.deb` | Linux x86_64 deb |
+            | `Launcher-__VERSION__-1.x86_64.rpm` | Linux x86_64 rpm |
+            | `Launcher___VERSION___aarch64.AppImage` | Linux ARM64 AppImage |
+            | `Launcher___VERSION___arm64.deb` | Linux ARM64 deb |
+            | `Launcher-__VERSION__-1.aarch64.rpm` | Linux ARM64 rpm |
           releaseDraft: true
           prerelease: false
           args: ${{ matrix.args }}
