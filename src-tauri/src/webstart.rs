@@ -6,6 +6,8 @@ use std::fs::File;
 use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
+#[cfg(windows)]
+use std::os::windows::process::CommandExt;
 use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
@@ -215,13 +217,10 @@ impl WebstartFile {
             .arg(&self.main_class)
             .args(&self.args);
 
-        // Pass credentials via environment variables instead of command-line
-        // arguments, which are visible to other users via ps/proc.
-        // The Java app reads these from LAUNCHER_USERNAME / LAUNCHER_PASSWORD.
         if let Some(ref username) = ce.username {
-            cmd.env("LAUNCHER_USERNAME", username);
+            cmd.arg(username);
             if let Some(ref password) = ce.password {
-                cmd.env("LAUNCHER_PASSWORD", password);
+                cmd.arg(password);
             }
         }
 
@@ -236,17 +235,22 @@ impl WebstartFile {
                 format!("{}/bin/java", java_home)
             };
 
-            let mut console_proc = Command::new(&java_bin)
+            let mut console_cmd = Command::new(&java_bin);
+            console_cmd
                 .arg("-Xmx256m")
                 .arg("-cp")
                 .arg(console_jar.to_str().ok_or_else(|| Error::msg("console jar path is not valid UTF-8"))?)
                 .arg("com.innovarhealthcare.launcher.JavaConsoleDialog")
-                .stdin(Stdio::piped())
-                .spawn()?;
+                .stdin(Stdio::piped());
+            #[cfg(windows)]
+            console_cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
+            let mut console_proc = console_cmd.spawn()?;
 
             // Launch the target process with stdout piped to the console
             // stderr inherits (default) so it doesn't block the process
             cmd.stdout(Stdio::piped());
+            #[cfg(windows)]
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
             let mut target_proc = cmd.spawn()?;
 
             // Pipe target stdout → console stdin in a background thread
@@ -275,6 +279,8 @@ impl WebstartFile {
         } else {
             cmd.stdout(Stdio::inherit());
             cmd.stderr(Stdio::inherit());
+            #[cfg(windows)]
+            cmd.creation_flags(0x08000000); // CREATE_NO_WINDOW
             cmd.spawn()?;
         }
 
