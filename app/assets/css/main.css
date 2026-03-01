@@ -134,11 +134,6 @@ input, textarea {
   opacity: 1;
 }
 
-[data-tooltip-below]::after {
-  bottom: auto;
-  top: calc(100% + 6px);
-}
-
 /* ─── Status Bar Progress ─── */
 @keyframes statusSlide {
   0% { transform: translateX(-100%); }

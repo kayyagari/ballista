@@ -193,8 +193,6 @@ const deselectAll = () => {
         </button>
         <button
           @click="openHelp"
-          data-tooltip="Open wiki in browser"
-          data-tooltip-below
           class="flex items-center justify-center size-6 rounded-md text-text-disabled hover:text-text-tertiary hover:cursor-pointer transition-colors duration-100"
         >
           <icon name="ph:question" class="text-sm" />
