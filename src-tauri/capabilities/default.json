@@ -20,6 +20,12 @@
         { "url": "http://**:**" },
         { "url": "https://**:**" }
       ]
+    },
+    {
+      "identifier": "shell:allow-open",
+      "allow": [
+        { "url": "https://github.com/pacmano1/launcher/wiki" }
+      ]
     }
   ]
 }

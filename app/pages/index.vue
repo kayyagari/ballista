@@ -4,6 +4,7 @@ import { LandingScreenServerStatus } from "~/enums"
 import { Channel, invoke } from "@tauri-apps/api/core"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
 import { ask, open } from "@tauri-apps/plugin-dialog"
+import { open as shellOpen } from "@tauri-apps/plugin-shell"
 
 type SortMode = "group" | "name" | "lastConnected" | "status"
 
@@ -75,6 +76,19 @@ const mappedServers = computed(() =>
   Object.groupBy(filteredServers.value, ({ group }) => group),
 )
 
+const collapsedGroups = reactive<Set<string>>(
+  new Set(JSON.parse(localStorage.getItem("launcher-collapsed-groups") || "[]")),
+)
+
+const toggleGroup = (group: string) => {
+  if (collapsedGroups.has(group)) {
+    collapsedGroups.delete(group)
+  } else {
+    collapsedGroups.add(group)
+  }
+  localStorage.setItem("launcher-collapsed-groups", JSON.stringify([...collapsedGroups]))
+}
+
 const hasServers = computed(() => servers.length > 0)
 const hasResults = computed(() => filteredServers.value.length > 0)
 
@@ -143,6 +157,22 @@ const importConnections = async () => {
   }
 }
 
+const refreshStatuses = () => {
+  servers.forEach(checkConnectivity)
+}
+
+const showAbout = ref(false)
+
+const openHelp = async () => {
+  const confirmed = await ask("This will open the Launcher wiki in your default browser. Continue?", {
+    title: "Open Help",
+    kind: "info",
+  })
+  if (confirmed) {
+    await shellOpen("https://github.com/pacmano1/launcher/wiki")
+  }
+}
+
 const deselectAll = () => {
   selectedServerId.value = null
   showSortMenu.value = false
@@ -153,11 +183,28 @@ const deselectAll = () => {
   <div class="bg-surface-0 flex flex-col h-full select-none overflow-hidden">
     <!-- Header -->
     <div class="flex items-center justify-between px-5 pt-5 pb-3">
-      <h1 class="font-semibold text-lg text-text-primary">Launcher</h1>
+      <div class="flex items-center gap-2">
+        <h1 class="font-semibold text-lg text-text-primary">Launcher</h1>
+        <button
+          @click="showAbout = true"
+          class="flex items-center justify-center size-6 rounded-md text-text-disabled hover:text-text-tertiary hover:cursor-pointer transition-colors duration-100"
+        >
+          <icon name="ph:info" class="text-sm" />
+        </button>
+        <button
+          @click="openHelp"
+          data-tooltip="Open wiki in browser"
+          data-tooltip-below
+          class="flex items-center justify-center size-6 rounded-md text-text-disabled hover:text-text-tertiary hover:cursor-pointer transition-colors duration-100"
+        >
+          <icon name="ph:question" class="text-sm" />
+        </button>
+      </div>
       <div class="flex items-center gap-2">
         <button
           class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-border bg-surface-1 text-text-secondary hover:text-text-primary hover:bg-surface-2 hover:cursor-pointer transition-colors duration-100"
           @click="importConnections"
+          data-tooltip="Import connections from JSON file"
         >
           <icon name="ph:download-simple-bold" class="text-xs" />
           Import
@@ -186,6 +233,13 @@ const deselectAll = () => {
           class="w-full bg-surface-1 border border-border rounded-md py-1.5 pl-8 pr-3 text-sm text-text-primary placeholder:text-text-disabled outline-none transition-colors duration-100 focus:border-border-focus focus:ring-1 focus:ring-accent/30"
         />
       </div>
+      <button
+        @click="refreshStatuses"
+        data-tooltip="Refresh server status"
+        class="flex items-center justify-center size-8 rounded-md border border-border bg-surface-1 text-text-tertiary hover:text-text-primary hover:cursor-pointer transition-colors duration-100"
+      >
+        <icon name="ph:arrow-clockwise" class="text-sm" />
+      </button>
       <div class="relative">
         <button
           @click="showSortMenu = !showSortMenu"
@@ -265,11 +319,20 @@ const deselectAll = () => {
           :key="group"
           @click.self="deselectAll"
         >
-          <p class="text-xs font-medium text-text-tertiary uppercase tracking-wider px-2 mb-1">
+          <button
+            class="flex items-center gap-1.5 text-xs font-medium text-text-tertiary uppercase tracking-wider px-2 mb-1 hover:text-text-secondary transition-colors duration-100 hover:cursor-pointer"
+            @click="toggleGroup(group)"
+          >
+            <icon
+              name="ph:caret-right-bold"
+              class="text-[10px] transition-transform duration-150"
+              :class="collapsedGroups.has(group) ? '' : 'rotate-90'"
+            />
             {{ group }}
-          </p>
+            <span class="normal-case tracking-normal font-normal">({{ groupServers?.length ?? 0 }})</span>
+          </button>
 
-          <div class="space-y-px">
+          <div v-if="!collapsedGroups.has(group)" class="space-y-px">
             <brief-server-info
               v-for="server in groupServers"
               :key="server.id"
@@ -332,6 +395,35 @@ const deselectAll = () => {
         <div class="flex items-center justify-between px-4 py-2">
           <p class="text-xs text-danger truncate">{{ launchError }}</p>
           <button @click="launchError = null" class="text-xs text-danger hover:text-text-primary hover:cursor-pointer ml-2 flex-none">Dismiss</button>
+        </div>
+      </div>
+    </Transition>
+
+    <!-- About modal -->
+    <Transition
+      enter-active-class="transition duration-150 ease-out"
+      enter-from-class="opacity-0"
+      enter-to-class="opacity-100"
+      leave-active-class="transition duration-100 ease-in"
+      leave-from-class="opacity-100"
+      leave-to-class="opacity-0"
+    >
+      <div v-if="showAbout" class="absolute inset-0 z-[100] flex items-center justify-center bg-black/50" @click.self="showAbout = false">
+        <div class="bg-surface-1 border border-border rounded-lg shadow-overlay w-80 p-5">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="font-semibold text-text-primary">About Launcher</h2>
+            <button @click="showAbout = false" class="text-text-tertiary hover:text-text-primary hover:cursor-pointer">
+              <icon name="ph:x" class="text-sm" />
+            </button>
+          </div>
+          <div class="space-y-3 text-sm">
+            <p class="text-text-secondary">Version 2.0.0</p>
+            <div class="space-y-1">
+              <p class="text-text-secondary">Originally created by <span class="text-text-primary">Kiran Ayyagari</span></p>
+              <p class="text-text-secondary">Modifications by <span class="text-text-primary">Diridium Technologies Inc.</span></p>
+            </div>
+            <p class="text-text-tertiary text-xs">Licensed under MPL-2.0</p>
+          </div>
         </div>
       </div>
     </Transition>
