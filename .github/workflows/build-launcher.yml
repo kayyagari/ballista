@@ -15,9 +15,28 @@ jobs:
       contents: write
     strategy:
       fail-fast: false
-      max-parallel: 3
       matrix:
-        platform: [macos-latest, ubuntu-latest, windows-latest]
+        include:
+          - platform: macos-latest
+            rust-targets: x86_64-apple-darwin
+            args: "--target universal-apple-darwin"
+            artifact-name: build-macos-universal
+          - platform: ubuntu-latest
+            rust-targets: ""
+            args: ""
+            artifact-name: build-linux-x86_64
+          - platform: ubuntu-24.04-arm
+            rust-targets: ""
+            args: ""
+            artifact-name: build-linux-arm64
+          - platform: windows-latest
+            rust-targets: ""
+            args: ""
+            artifact-name: build-windows-x86_64
+          - platform: windows-11-arm
+            rust-targets: ""
+            args: ""
+            artifact-name: build-windows-arm64
     runs-on: ${{ matrix.platform }}
 
     steps:
@@ -26,13 +45,14 @@ jobs:
 
       - name: Install dependencies (ubuntu only)
         if: startsWith(matrix.platform, 'ubuntu')
-        # You can remove libayatana-appindicator3-dev if you don't use the system tray feature.
         run: |
           sudo apt-get update
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev
 
       - name: Rust setup
         uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.rust-targets }}
 
       - name: Rust cache
         uses: swatinem/rust-cache@v2
@@ -55,10 +75,11 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           tagName: ${{ github.ref_name }}
-          releaseName: "App Name v__VERSION__"
+          releaseName: "Launcher v__VERSION__"
           releaseBody: "See the assets to download and install this version."
           releaseDraft: true
           prerelease: false
+          args: ${{ matrix.args }}
 
       - name: Build the app
         if: ${{ github.ref != 'refs/heads/master' }}
@@ -66,13 +87,12 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          releaseDraft: false
-          prerelease: false
+          args: ${{ matrix.args }}
 
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ matrix.platform }}
+          name: ${{ matrix.artifact-name }}
           path: |
             src-tauri/target/release/bundle/nsis/*.exe
             src-tauri/target/release/bundle/msi/*.msi
@@ -81,3 +101,5 @@ jobs:
             src-tauri/target/release/bundle/rpm/*.rpm
             src-tauri/target/release/bundle/dmg/*.dmg
             src-tauri/target/release/bundle/macos/*.app
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            src-tauri/target/universal-apple-darwin/release/bundle/macos/*.app
