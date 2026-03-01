@@ -134,7 +134,13 @@ const openSettings = (server: Connection) =>
   navigateTo(`/connections/${server.id}`)
 
 const importConnections = async () => {
+  const proceed = await ask(
+    "Select a JSON file containing connection definitions (e.g., exported from another Launcher instance or from MCAL's data/connections.json).",
+    { title: "Import Connections", kind: "info" },
+  )
+  if (!proceed) return
   const filePath = await open({
+    title: "Select connections JSON file",
     filters: [{ name: "JSON", extensions: ["json"] }],
     multiple: false,
   })
@@ -161,6 +167,8 @@ const refreshStatuses = () => {
   servers.forEach(checkConnectivity)
 }
 
+const { theme, toggle: toggleTheme } = useTheme()
+
 const showAbout = ref(false)
 
 const openHelp = async () => {
@@ -184,12 +192,27 @@ const deselectAll = () => {
     <!-- Header -->
     <div class="flex items-center justify-between px-5 pt-5 pb-3">
       <div class="flex items-center gap-2">
-        <h1 class="font-semibold text-lg text-text-primary">Launcher</h1>
         <button
-          @click="showAbout = true"
+          class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-accent text-white hover:bg-accent-hover hover:cursor-pointer transition-colors duration-100"
+          @click="navigateTo('/connections/new-connection')"
+        >
+          <icon name="ph:plus-bold" class="text-xs" />
+          Add
+        </button>
+        <button
+          class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-border bg-surface-1 text-text-secondary hover:text-text-primary hover:bg-surface-2 hover:cursor-pointer transition-colors duration-100"
+          @click="importConnections"
+        >
+          <icon name="ph:download-simple-bold" class="text-xs" />
+          Import
+        </button>
+      </div>
+      <div class="flex items-center gap-2">
+        <button
+          @click="toggleTheme"
           class="flex items-center justify-center size-6 rounded-md text-text-disabled hover:text-text-tertiary hover:cursor-pointer transition-colors duration-100"
         >
-          <icon name="ph:info" class="text-sm" />
+          <icon :name="theme === 'dark' ? 'ph:sun' : 'ph:moon'" class="text-sm" />
         </button>
         <button
           @click="openHelp"
@@ -197,22 +220,11 @@ const deselectAll = () => {
         >
           <icon name="ph:question" class="text-sm" />
         </button>
-      </div>
-      <div class="flex items-center gap-2">
         <button
-          class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-border bg-surface-1 text-text-secondary hover:text-text-primary hover:bg-surface-2 hover:cursor-pointer transition-colors duration-100"
-          @click="importConnections"
-          data-tooltip="Import connections from JSON file"
+          @click="showAbout = true"
+          class="flex items-center justify-center size-6 rounded-md text-text-disabled hover:text-text-tertiary hover:cursor-pointer transition-colors duration-100"
         >
-          <icon name="ph:download-simple-bold" class="text-xs" />
-          Import
-        </button>
-        <button
-          class="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-accent text-white hover:bg-accent-hover hover:cursor-pointer transition-colors duration-100"
-          @click="navigateTo('/connections/new-connection')"
-        >
-          <icon name="ph:plus-bold" class="text-xs" />
-          Add
+          <icon name="ph:info" class="text-sm" />
         </button>
       </div>
     </div>

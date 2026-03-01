@@ -38,6 +38,31 @@
   --shadow-overlay: 0 16px 48px rgba(0, 0, 0, 0.2);
 }
 
+/* ─── Light Theme Overrides ─── */
+[data-theme="light"] {
+  --color-surface-0: #f8f9fb;
+  --color-surface-1: #ffffff;
+  --color-surface-2: #f0f1f4;
+  --color-surface-3: #e5e7ec;
+  --color-accent: #3b6ce7;
+  --color-accent-hover: #2d5bd6;
+  --color-text-primary: #1a1d24;
+  --color-text-secondary: #4b5563;
+  --color-text-tertiary: #6b7280;
+  --color-text-disabled: #9ca3af;
+  --color-status-available: #22c55e;
+  --color-status-unavailable: #ef4444;
+  --color-status-pending: #f59e0b;
+  --color-danger: #ef4444;
+  --color-danger-hover: #dc2626;
+  --color-border: #d1d5db;
+  --color-border-focus: #3b6ce7;
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.10);
+  --shadow-overlay: 0 16px 48px rgba(0, 0, 0, 0.15);
+}
+
 /* ─── Base Styles ─── */
 html {
   font-size: 13px;

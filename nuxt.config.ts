@@ -12,6 +12,14 @@ export default defineNuxtConfig({
   },
 
   app: {
+    head: {
+      script: [
+        {
+          innerHTML: `(function(){var t=localStorage.getItem('launcher-theme');if(t==='light')document.documentElement.setAttribute('data-theme','light')})()`,
+          type: "text/javascript",
+        },
+      ],
+    },
     pageTransition: {
       name: "slide", // we'll define CSS for "slide"
       mode: "out-in", // waits for leave before enter
