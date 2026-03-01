@@ -96,14 +96,15 @@ impl WebstartFile {
 
         let resources_node = get_node(&root, "resources");
 
-        let mut version = "default";
+        let mut version = "default".to_string();
         if let Some(jnlp_node) = get_node(&root, "jnlp") {
             if let Some(v) = jnlp_node.attribute("version") {
-                version = v;
+                // Sanitize to prevent path traversal (e.g. "../../.ssh")
+                version = v.replace(['/', '\\', '.'], "_");
             }
         }
 
-        let jar_dir = cache_dir.join(host).join(version);
+        let jar_dir = cache_dir.join(host).join(&version);
         if donotcache && jar_dir.exists() {
             println!("removing directory {:?}", jar_dir);
             std::fs::remove_dir_all(&jar_dir)?;
@@ -189,8 +190,11 @@ impl WebstartFile {
                 // this will be ignored by java version <= 1.8
                 if va.version.contains("1.9") {
                     if let Some(java_vm_args) = &va.java_vm_args {
-                        println!("setting JDK_JAVA_OPTIONS environment variable with the java-vm-args given for version {} in JNLP file", va.version);
-                        cmd.env("JDK_JAVA_OPTIONS", java_vm_args);
+                        let filtered = sanitize_vm_args(java_vm_args);
+                        if !filtered.is_empty() {
+                            println!("setting JDK_JAVA_OPTIONS environment variable with the java-vm-args given for version {} in JNLP file", va.version);
+                            cmd.env("JDK_JAVA_OPTIONS", &filtered);
+                        }
                     }
                 }
             }
@@ -211,10 +215,13 @@ impl WebstartFile {
             .arg(&self.main_class)
             .args(&self.args);
 
+        // Pass credentials via environment variables instead of command-line
+        // arguments, which are visible to other users via ps/proc.
+        // The Java app reads these from LAUNCHER_USERNAME / LAUNCHER_PASSWORD.
         if let Some(ref username) = ce.username {
-            cmd.arg(username);
+            cmd.env("LAUNCHER_USERNAME", username);
             if let Some(ref password) = ce.password {
-                cmd.arg(password);
+                cmd.env("LAUNCHER_PASSWORD", password);
             }
         }
 
@@ -355,6 +362,32 @@ fn download_jars(
     }
 
     Ok(())
+}
+
+/// Filter JNLP java-vm-args to block flags that could execute arbitrary code.
+fn sanitize_vm_args(args: &str) -> String {
+    let dangerous_prefixes: &[&str] = &[
+        "-javaagent:",
+        "-agentpath:",
+        "-agentlib:",
+        "-xbootclasspath",
+        "-xx:onoutofmemoryerror",
+        "-xx:onoutofmemoryerror=",
+        "-xx:onerror",
+        "-xx:onerror=",
+    ];
+
+    args.split_whitespace()
+        .filter(|arg| {
+            let lower = arg.to_lowercase();
+            let dominated = dangerous_prefixes.iter().any(|p| lower.starts_with(p));
+            if dominated {
+                println!("sanitize_vm_args: dropping dangerous flag: {}", arg);
+            }
+            !dominated
+        })
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 fn get_file_name_from_path(p: &str) -> &str {
