@@ -345,14 +345,18 @@ fn download_jars(
         if jar {
             let file_name = get_file_name_from_path(href);
             *counter += 1;
-            let _ = on_progress.send(serde_json::json!({
-                "message": format!("Downloading {} ({})", file_name, counter),
-            }));
             let jar_file_path = dir_path.join(file_name);
             if has_file_changed(&jar_file_path, hash_in_jnlp)? {
+                let _ = on_progress.send(serde_json::json!({
+                    "message": format!("Downloading {} ({})", file_name, counter),
+                }));
                 let mut resp = client.get(url).send()?;
                 let mut f = File::create(&jar_file_path)?;
                 resp.copy_to(&mut f)?;
+            } else {
+                let _ = on_progress.send(serde_json::json!({
+                    "message": format!("Cached {} ({})", file_name, counter),
+                }));
             }
         } else if extension {
             let r = client.get(url).send()?;
