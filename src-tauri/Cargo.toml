@@ -1,5 +1,5 @@
 [package]
-name = "launcher"
+name = "ballista"
 version = "2.0.0"
 description = "An Open Integration Engine Admin Client Launcher"
 authors = ["kiran@sereen.io"]

@@ -5,7 +5,7 @@ import { ref } from "vue"
 
 type Theme = "dark" | "light"
 
-const STORAGE_KEY = "launcher-theme"
+const STORAGE_KEY = "ballista-theme"
 const DEFAULT_THEME: Theme = "dark"
 
 const theme = ref<Theme>(DEFAULT_THEME)

@@ -15,7 +15,7 @@ export default defineNuxtConfig({
     head: {
       script: [
         {
-          innerHTML: `(function(){var t=localStorage.getItem('launcher-theme');if(t==='light')document.documentElement.setAttribute('data-theme','light')})()`,
+          innerHTML: `(function(){var t=localStorage.getItem('ballista-theme');if(t==='light')document.documentElement.setAttribute('data-theme','light')})()`,
           type: "text/javascript",
         },
       ],

@@ -8,7 +8,7 @@ const ZOOM_STEP = 0.1
 const ZOOM_MIN = 0.5
 const ZOOM_MAX = 2.0
 const DEFAULT_ZOOM = 1.0
-const STORAGE_KEY = "launcher-zoom-level"
+const STORAGE_KEY = "ballista-zoom-level"
 
 const zoomLevel = ref(DEFAULT_ZOOM)
 

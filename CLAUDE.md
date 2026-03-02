@@ -1,4 +1,4 @@
-# Launcher
+# Ballista
 
 Tauri v2 desktop app for launching and managing integration engine administrator instances. Rust backend + Nuxt 4/Vue 3 frontend. Originally forked from [kayyagari/ballista](https://github.com/kayyagari/ballista).
 

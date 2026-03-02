@@ -33,7 +33,7 @@ const checkConnectivity = async (server: Connection) => {
       method: "GET",
       danger: { acceptInvalidCerts: true, acceptInvalidHostnames: true },
       connectTimeout: 2000,
-      headers: { "X-Requested-With": "Launcher" },
+      headers: { "X-Requested-With": "Ballista" },
     })
     serverStatuses[server.id] = LandingScreenServerStatus.AVAILABLE
   } catch {
@@ -135,7 +135,7 @@ const openSettings = (server: Connection) =>
 
 const importConnections = async () => {
   const proceed = await ask(
-    "Select a JSON file containing connection definitions (e.g., exported from another Launcher instance or from MCAL's data/connections.json).",
+    "Select a JSON file containing connection definitions (e.g., exported from another Ballista instance or from MCAL's data/connections.json).",
     { title: "Import Connections", kind: "info" },
   )
   if (!proceed) return
@@ -172,7 +172,7 @@ const { theme, toggle: toggleTheme } = useTheme()
 const showAbout = ref(false)
 
 const openHelp = async () => {
-  const confirmed = await ask("This will open the Launcher wiki in your default browser. Continue?", {
+  const confirmed = await ask("This will open the Ballista wiki in your default browser. Continue?", {
     title: "Open Help",
     kind: "info",
   })
@@ -421,7 +421,7 @@ const deselectAll = () => {
       <div v-if="showAbout" class="absolute inset-0 z-[100] flex items-center justify-center bg-black/50" @click.self="showAbout = false">
         <div class="bg-surface-1 border border-border rounded-lg shadow-overlay w-80 p-5">
           <div class="flex items-center justify-between mb-4">
-            <h2 class="font-semibold text-text-primary">About Launcher</h2>
+            <h2 class="font-semibold text-text-primary">About Ballista</h2>
             <button @click="showAbout = false" class="text-text-tertiary hover:text-text-primary hover:cursor-pointer">
               <icon name="ph:x" class="text-sm" />
             </button>

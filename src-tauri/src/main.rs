@@ -164,15 +164,13 @@ fn main() {
     }
 
     // >= 2.1.0 migrate from .ballista to .launcher
-    let launcher_directory = home_directory.join(".launcher");
+    let launcher_directory = home_directory.join(".ballista");
     if let Err(e) = fs::create_dir(&launcher_directory) {
         if e.kind() != std::io::ErrorKind::AlreadyExists {
-            println!("failed to create .launcher directory: {}", e);
+            println!("failed to create .ballista directory: {}", e);
             exit(1);
         }
     }
-    move_file(legacy_ballista_dir.join("ballista-data.json"), launcher_directory.join("launcher-data.json"));
-    move_file(legacy_ballista_dir.join("ballista-trusted-certs.json"), launcher_directory.join("launcher-trusted-certs.json"));
 
     let connection_store = ConnectionStore::init(launcher_directory);
     if let Err(e) = connection_store {

@@ -334,6 +334,39 @@ dependencies = [
 ]
 
 [[package]]
+name = "ballista"
+version = "2.0.0"
+dependencies = [
+ "anyhow",
+ "asn1-rs",
+ "fix-path-env",
+ "hex",
+ "home",
+ "openssl",
+ "openssl-probe",
+ "reqwest 0.12.28",
+ "roxmltree",
+ "rustc-hash",
+ "serde",
+ "serde_json",
+ "sha2",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-clipboard-manager",
+ "tauri-plugin-dialog",
+ "tauri-plugin-fs",
+ "tauri-plugin-global-shortcut",
+ "tauri-plugin-http",
+ "tauri-plugin-notification",
+ "tauri-plugin-os",
+ "tauri-plugin-process",
+ "tauri-plugin-shell",
+ "tauri-runtime-wry",
+ "uuid",
+ "zip",
+]
+
+[[package]]
 name = "base64"
 version = "0.21.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2333,39 +2366,6 @@ dependencies = [
  "html5ever",
  "indexmap 2.10.0",
  "selectors",
-]
-
-[[package]]
-name = "launcher"
-version = "2.0.0"
-dependencies = [
- "anyhow",
- "asn1-rs",
- "fix-path-env",
- "hex",
- "home",
- "openssl",
- "openssl-probe",
- "reqwest 0.12.28",
- "roxmltree",
- "rustc-hash",
- "serde",
- "serde_json",
- "sha2",
- "tauri",
- "tauri-build",
- "tauri-plugin-clipboard-manager",
- "tauri-plugin-dialog",
- "tauri-plugin-fs",
- "tauri-plugin-global-shortcut",
- "tauri-plugin-http",
- "tauri-plugin-notification",
- "tauri-plugin-os",
- "tauri-plugin-process",
- "tauri-plugin-shell",
- "tauri-runtime-wry",
- "uuid",
- "zip",
 ]
 
 [[package]]

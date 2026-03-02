@@ -1,4 +1,4 @@
-# Launcher
+# Ballista
 
 A lean and simple launcher for Open Integration Engine administration.
 
