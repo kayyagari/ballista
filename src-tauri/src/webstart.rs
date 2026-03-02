@@ -74,7 +74,6 @@ impl WebstartFile {
         let (base_url, _host) = normalize_url(base_url)?;
         let webstart = format!("{}/webstart.jnlp", base_url); // base_url will never contain a / at the end after normalization
         let _ = on_progress.send(serde_json::json!({"message": "Fetching server configuration..."}));
-        let t_jnlp = std::time::Instant::now();
         let cb = ClientBuilder::default()
             // in certain network environments client is failing with error message "connection closed before message completed"
             // disabling the pooling resolved the issue
@@ -85,7 +84,6 @@ impl WebstartFile {
 
         let r = client.get(&webstart).send()?;
         let data = r.text()?;
-        let jnlp_elapsed = t_jnlp.elapsed();
         let doc = roxmltree::Document::parse(&data)?;
 
         let root = doc.root();
@@ -128,19 +126,9 @@ impl WebstartFile {
         }
 
         let mut j2ses = None;
-        let mut jar_count = 0usize;
-        let mut jar_elapsed = std::time::Duration::ZERO;
-        let mut stats = JarStats { cached_fast: 0, cached_slow: 0, downloaded: 0, extensions: 0, no_hash: 0 };
         if let Some(resources_node) = resources_node {
             j2ses = get_j2ses(&resources_node);
-            let t_jars = std::time::Instant::now();
-            download_jars(&resources_node, &client, dir_path, &base_url, on_progress, &mut jar_count, &mut stats)?;
-            jar_elapsed = t_jars.elapsed();
-        }
-
-        let timing_log = cache_dir.parent().map(|p| p.join("launch-timing.log"));
-        if let Some(log_path) = timing_log {
-            let _ = std::fs::write(&log_path, format!("JNLP fetch: {:.1?}\nJAR check ({} jars): {:.1?}\n{}\n", jnlp_elapsed, jar_count, jar_elapsed, stats));
+            download_jars(&resources_node, &client, dir_path, &base_url, on_progress)?;
         }
 
         let loaded_at = SystemTime::now();
@@ -337,30 +325,14 @@ impl WebstartFile {
     }
 }
 
-struct JarStats {
-    cached_fast: usize,
-    cached_slow: usize,
-    downloaded: usize,
-    extensions: usize,
-    no_hash: usize,
-}
-
-impl std::fmt::Display for JarStats {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "fast={}, slow={}, downloaded={}, extensions={}, no_hash={}",
-            self.cached_fast, self.cached_slow, self.downloaded, self.extensions, self.no_hash)
-    }
-}
-
 fn download_jars(
     resources_node: &Node,
     client: &Client,
     dir_path: &Path,
     base_url: &str,
     on_progress: &Channel<serde_json::Value>,
-    counter: &mut usize,
-    stats: &mut JarStats,
 ) -> Result<(), Error> {
+    let mut counter = 0usize;
     for n in resources_node.children() {
         let jar = n.has_tag_name("jar");
         let extension = n.has_tag_name("extension");
@@ -378,45 +350,28 @@ fn download_jars(
 
         if jar {
             let file_name = get_file_name_from_path(href);
-            *counter += 1;
+            counter += 1;
             let jar_file_path = dir_path.join(file_name);
-            if hash_in_jnlp.is_none() {
-                stats.no_hash += 1;
-            }
-            match has_file_changed(&jar_file_path, hash_in_jnlp)? {
-                CacheResult::FastHit => { stats.cached_fast += 1; }
-                CacheResult::SlowHit => { stats.cached_slow += 1; }
-                CacheResult::Changed => {
-                    stats.downloaded += 1;
-                    let _ = on_progress.send(serde_json::json!({
-                        "message": format!("Downloading {} ({})", file_name, counter),
-                    }));
-                    let mut resp = client.get(url).send()?;
-                    let mut f = File::create(&jar_file_path)?;
-                    resp.copy_to(&mut f)?;
-                    if let Some(h) = hash_in_jnlp {
-                        let _ = std::fs::write(jar_file_path.with_extension("sha256"), h);
-                    }
-                }
+            let _ = on_progress.send(serde_json::json!({
+                "message": format!("Verifying cache file {}", file_name),
+            }));
+            if has_file_changed(&jar_file_path, hash_in_jnlp)? {
+                let _ = on_progress.send(serde_json::json!({
+                    "message": format!("Downloading {} ({})", file_name, counter),
+                }));
+                let mut resp = client.get(url).send()?;
+                let mut f = File::create(&jar_file_path)?;
+                resp.copy_to(&mut f)?;
             }
         } else if extension {
-            stats.extensions += 1;
-            let ext_file_name = get_file_name_from_path(href);
-            let ext_cache_path = dir_path.join(ext_file_name);
-            let data = if ext_cache_path.exists() {
-                std::fs::read_to_string(&ext_cache_path)?
-            } else {
-                let r = client.get(url).send()?;
-                let body = r.text()?;
-                let _ = std::fs::write(&ext_cache_path, &body);
-                body
-            };
+            let r = client.get(url).send()?;
+            let data = r.text()?;
             let doc = roxmltree::Document::parse(&data)?;
             let root = doc.root();
             let resources_node = get_node(&root, "resources");
             let ext_base_url = format!("{}/webstart/extensions", base_url);
             if let Some(resources_node) = resources_node {
-                download_jars(&resources_node, client, dir_path, &ext_base_url, on_progress, counter, stats)?;
+                download_jars(&resources_node, client, dir_path, &ext_base_url, on_progress)?;
             }
         }
     }
@@ -523,25 +478,10 @@ fn normalize_url(u: &str) -> Result<(String, String), Error> {
     Ok((reconstructed_url, host))
 }
 
-enum CacheResult {
-    FastHit,
-    SlowHit,
-    Changed,
-}
-
-fn has_file_changed(jar_file_path: &Path, hash_in_jnlp: Option<&str>) -> Result<CacheResult, Error> {
+fn has_file_changed(jar_file_path: &Path, hash_in_jnlp: Option<&str>) -> Result<bool, Error> {
     if let Some(hash_in_jnlp) = hash_in_jnlp {
+        let mut hasher = Sha256::new();
         if jar_file_path.exists() {
-            // Fast path: compare against stored sidecar hash
-            let sidecar = jar_file_path.with_extension("sha256");
-            if let Ok(stored) = std::fs::read_to_string(&sidecar) {
-                if stored.trim() == hash_in_jnlp {
-                    return Ok(CacheResult::FastHit);
-                }
-            }
-
-            // Slow path: recompute hash from file
-            let mut hasher = Sha256::new();
             let jar_file = File::open(&jar_file_path)?;
             let mut reader = BufReader::new(&jar_file);
             let mut buf = [0; 2048];
@@ -553,16 +493,11 @@ fn has_file_changed(jar_file_path: &Path, hash_in_jnlp: Option<&str>) -> Result<
             }
             let val = hasher.finalize();
             let val = openssl::base64::encode_block(val.as_slice());
-            if hash_in_jnlp != &val {
-                return Ok(CacheResult::Changed);
-            }
-            // Write sidecar so next launch takes the fast path
-            let _ = std::fs::write(&sidecar, hash_in_jnlp);
-            return Ok(CacheResult::SlowHit);
+            return Ok(hash_in_jnlp != &val);
         }
     }
 
-    Ok(CacheResult::Changed)
+    Ok(true)
 }
 #[cfg(test)]
 mod tests {
