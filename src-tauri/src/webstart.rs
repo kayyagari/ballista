@@ -70,8 +70,8 @@ impl WebStartCache {
 }
 
 impl WebstartFile {
-    pub fn load(base_url: &str, cache_dir: &PathBuf, donotcache: bool, on_progress: &Channel<serde_json::Value>) -> Result<WebstartFile, Error> {
-        let (base_url, host) = normalize_url(base_url)?;
+    pub fn load(base_url: &str, cache_dir: &PathBuf, donotcache: bool, conn_id: &str, conn_name: &str, on_progress: &Channel<serde_json::Value>) -> Result<WebstartFile, Error> {
+        let (base_url, _host) = normalize_url(base_url)?;
         let webstart = format!("{}/webstart.jnlp", base_url); // base_url will never contain a / at the end after normalization
         let _ = on_progress.send(serde_json::json!({"message": "Fetching server configuration..."}));
         let t_jnlp = std::time::Instant::now();
@@ -108,7 +108,14 @@ impl WebstartFile {
             }
         }
 
-        let jar_dir = cache_dir.join(host).join(&version);
+        let sanitized_name = conn_name
+            .to_lowercase()
+            .chars()
+            .map(|c| if c.is_alphanumeric() { c } else { '-' })
+            .collect::<String>();
+        let id_prefix = &conn_id[..conn_id.len().min(8)];
+        let cache_folder = format!("{}_{}", sanitized_name, id_prefix);
+        let jar_dir = cache_dir.join(cache_folder).join(&version);
         if donotcache && jar_dir.exists() {
             println!("removing directory {:?}", jar_dir);
             std::fs::remove_dir_all(&jar_dir)?;

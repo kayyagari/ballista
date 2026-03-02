@@ -41,6 +41,8 @@ async fn launch(id: String, on_progress: Channel<serde_json::Value>, app: AppHan
     let cache_dir = cs.cache_dir.clone();
     let cert_store = cs.get_cert_store();
     let address = ce.address.clone();
+    let conn_id = ce.id.clone();
+    let conn_name = ce.name.clone();
     let donotcache = ce.donotcache;
     let verify = ce.verify;
 
@@ -50,7 +52,7 @@ async fn launch(id: String, on_progress: Channel<serde_json::Value>, app: AppHan
             let on_progress = on_progress.clone();
             let address = address.clone();
             let cache_dir = cache_dir.clone();
-            move || WebstartFile::load(&address, &cache_dir, donotcache, &on_progress)
+            move || WebstartFile::load(&address, &cache_dir, donotcache, &conn_id, &conn_name, &on_progress)
         }).await.map_err(|e| e.to_string())?;
 
         match tmp {
