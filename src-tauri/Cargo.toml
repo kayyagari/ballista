@@ -51,3 +51,7 @@ custom-protocol = ["tauri/custom-protocol"]
 
 [target.'cfg(not(any(target_os = "android", target_os = "ios")))'.dependencies]
 tauri-plugin-global-shortcut = "2.3.1"
+
+[profile.release]
+opt-level = 3
+lto = true
