@@ -63,6 +63,10 @@ const handleDelete = async () => {
     errorMessage.value = `Delete failed: ${e}`
   }
 }
+
+const clearPinnedCertificate = () => {
+  server.value.peerCertificate = null
+}
 </script>
 
 <template>
@@ -114,6 +118,21 @@ const handleDelete = async () => {
           </div>
           <connection-input type="text" label="Heap Size" placeholder="512m" v-model="server.heapSize" />
           <connection-input type="text" label="Notes" placeholder="Optional notes" v-model="server.notes" />
+          <div class="space-y-1">
+            <label class="block text-sm font-medium text-text-secondary select-none">Pinned Certificate</label>
+            <div class="rounded-md border border-border bg-surface-1 px-3 py-2 text-sm text-text-primary">
+              <p v-if="server.peerCertificate">A certificate is pinned for this connection.</p>
+              <p v-else class="text-text-tertiary">No certificate pinned yet. The next launch will require explicit trust.</p>
+            </div>
+            <button
+              v-if="server.peerCertificate"
+              type="button"
+              @click="clearPinnedCertificate"
+              class="text-sm text-danger hover:cursor-pointer hover:underline"
+            >
+              Clear pinned certificate
+            </button>
+          </div>
           <div class="space-y-2 pt-1">
             <p class="text-sm font-medium text-text-secondary select-none">Options</p>
             <label class="flex items-center gap-2 text-sm text-text-primary hover:cursor-pointer select-none">
@@ -123,10 +142,6 @@ const handleDelete = async () => {
             <label class="flex items-center gap-2 text-sm text-text-primary hover:cursor-pointer select-none">
               <input type="checkbox" class="accent-accent" v-model="server.donotcache" />
               Do not cache
-            </label>
-            <label class="flex items-center gap-2 text-sm text-text-primary hover:cursor-pointer select-none">
-              <input type="checkbox" class="accent-accent" v-model="server.verify" />
-              Verify JAR files
             </label>
           </div>
         </section>

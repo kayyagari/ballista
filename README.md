@@ -10,7 +10,8 @@ Originally forked from [Ballista](https://github.com/kayyagari/ballista) by [Kir
 2. Create a new connection or import existing connections from `<MCAL-root>/data/connections.json`
 3. Launch a connection by double-clicking the desired server, or select it and click the play button
 4. Edit a connection by clicking the pencil icon on a server row
-5. Adjust the `Java Home` field's value if necessary (JRE version 8 or higher must be installed)
+5. On first launch, review and explicitly trust the server fingerprint for that connection before Ballista downloads any launch configuration
+6. Adjust the `Java Home` field's value if necessary (JRE version 8 or higher must be installed)
 
 ## Features
 
@@ -18,8 +19,16 @@ Originally forked from [Ballista](https://github.com/kayyagari/ballista) by [Kir
 - Real-time server connectivity status
 - Sort by group, name, last connected, or status
 - Java console output viewer
-- Jar signature verification with certificate trust management
+- Per-connection pinned peer trust for JNLP retrieval
 - Cross-platform: macOS, Windows, Linux
+
+## Trust Model
+
+Ballista uses a pinned trust model similar to SSH.
+
+- On the first launch of a connection, Ballista fetches the JNLP over HTTPS, captures the peer certificate fingerprint, and asks for explicit user approval before parsing or executing the launch configuration.
+- Once approved, the SHA-256 fingerprint is stored on that specific connection and every subsequent JNLP or launch-resource download must come from a peer presenting the same fingerprint.
+- If the fingerprint changes, launch is blocked. To trust a replacement certificate, clear the pinned fingerprint in the connection settings and launch again.
 
 ## Compiling
 

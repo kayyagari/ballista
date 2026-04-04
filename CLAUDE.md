@@ -17,20 +17,18 @@ cargo test
 
 ## Project Structure
 
-- `src-tauri/src/` — Rust backend (Tauri commands, jar verification, webstart/JNLP handling)
+- `src-tauri/src/` — Rust backend (Tauri commands, pinned peer trust, webstart/JNLP handling)
   - `main.rs` — Tauri command handlers and app setup
   - `connection.rs` — ConnectionStore, connection persistence, cert trust management
   - `webstart.rs` — JNLP parsing, jar downloading, Java process launching
-  - `verify.rs` — Jar signature verification (CMS/PKCS#7)
-  - `errors.rs` — VerificationError type and formatting
+  - `errors.rs` — LaunchError type and peer trust response formatting
 - `app/` — Nuxt 4 frontend (pages, components, composables, types)
 - `src-tauri/lib/` — Bundled Java console jar
 
 ## Conventions
 
 - Tauri commands use `rename_all = "snake_case"` — JS side must use snake_case parameter names
-- Self-signed certs are expected — `danger_accept_invalid_certs(true)` is intentional
-- Jar signature verification is the actual trust boundary, not TLS
+- Self-signed certs are expected — Ballista accepts them after user pinning
 - Rust error handling: prefer `?` operator and `ok_or_else` over `.unwrap()` — return errors to frontend, don't panic
 - Mutex locks: use `.expect("descriptive message")` since poisoning is unrecoverable
 - Frontend uses Tailwind CSS v4 with `@theme` design tokens in `app/assets/css/main.css`
