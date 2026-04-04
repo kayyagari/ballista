@@ -2,97 +2,80 @@
 // Copyright (c) Diridium Technologies Inc. All rights reserved.
 // Licensed under the MPL-2.0 License. See LICENSE file in the project root.
 
-use openssl::error::ErrorStack;
+use openssl::hash::MessageDigest;
 use openssl::x509::{X509NameRef, X509};
 use rustc_hash::FxHashMap;
 use serde_json::{Number, Value};
 use std::collections::VecDeque;
-use std::fmt::{Display, Formatter};
-use std::io::Error;
-use openssl::hash::MessageDigest;
-use zip::result::ZipError;
+
+#[derive(Debug, Clone)]
+pub struct PeerDetails {
+    pub der: String,
+    pub subject: String,
+    pub issuer: String,
+    pub expires_on: String,
+    pub sha256sum: String,
+}
+
+impl PeerDetails {
+    pub fn from_der(peer_cert_der: &[u8]) -> Result<Self, anyhow::Error> {
+        let cert = X509::from_der(peer_cert_der)?;
+        let sha256sum = hex::encode(cert.digest(MessageDigest::sha256())?);
+
+        Ok(PeerDetails {
+            der: openssl::base64::encode_block(peer_cert_der),
+            subject: format_name(cert.subject_name()),
+            issuer: format_name(cert.issuer_name()),
+            expires_on: cert.not_after().to_string(),
+            sha256sum,
+        })
+    }
+
+    fn to_value(&self) -> Value {
+        let mut peer = serde_json::Map::new();
+        peer.insert("der".to_string(), Value::String(self.der.clone()));
+        peer.insert("subject".to_string(), Value::String(self.subject.clone()));
+        peer.insert("issuer".to_string(), Value::String(self.issuer.clone()));
+        peer.insert("expires_on".to_string(), Value::String(self.expires_on.clone()));
+        peer.insert("sha256sum".to_string(), Value::String(self.sha256sum.clone()));
+        Value::Object(peer)
+    }
+}
 
 #[derive(Debug)]
-pub struct VerificationError {
-    pub(crate) cert: Option<X509>,
-    pub(crate) msg: String,
+pub enum LaunchError {
+    UntrustedPeer { peer: PeerDetails },
+    FingerprintMismatch { peer: PeerDetails, expected_fingerprint: String },
 }
 
-impl VerificationError {
+impl LaunchError {
     pub fn to_json(&self) -> String {
         let mut obj = FxHashMap::default();
-        obj.insert("msg", Value::String(self.msg.clone()));
-        obj.insert("code", Value::Number(Number::from(1)));
-        if let Some(ref cert) = self.cert {
-            let mut cert_details = serde_json::Map::new();
-            let der = match cert.to_der() {
-                Ok(d) => d,
-                Err(_) => return format!("{{\"msg\":\"{}\",\"code\":1}}", self.msg),
-            };
-            let der = openssl::base64::encode_block(der.as_slice());
-            cert_details.insert("der".to_string(), Value::String(der));
-            let subject = format_name(cert.subject_name());
-            cert_details.insert("subject".to_string(), Value::String(subject));
 
-            let issuer = format_name(cert.issuer_name());
-            cert_details.insert("issuer".to_string(), Value::String(issuer));
-
-            let expires_on = cert.not_after().to_string();
-            cert_details.insert("expires_on".to_string(), Value::String(expires_on));
-
-            let sha256_sum_bytes = match cert.digest(MessageDigest::sha256()) {
-                Ok(d) => d,
-                Err(_) => return format!("{{\"msg\":\"{}\",\"code\":1}}", self.msg),
-            };
-            let sha256_string = hex::encode(sha256_sum_bytes);
-            cert_details.insert("sha256sum".to_string(), Value::String(sha256_string));
-
-            obj.insert("cert", Value::Object(cert_details));
+        match self {
+            LaunchError::UntrustedPeer { peer } => {
+                obj.insert("code", Value::Number(Number::from(1)));
+                obj.insert("msg", Value::String("Untrusted peer certificate.".to_string()));
+                obj.insert("peer", peer.to_value());
+            }
+            LaunchError::FingerprintMismatch {
+                peer,
+                expected_fingerprint,
+            } => {
+                obj.insert("code", Value::Number(Number::from(2)));
+                obj.insert(
+                    "msg",
+                    Value::String("Server fingerprint does not match the pinned value.".to_string()),
+                );
+                obj.insert("peer", peer.to_value());
+                obj.insert(
+                    "expected_fingerprint",
+                    Value::String(expected_fingerprint.clone()),
+                );
+            }
         }
 
-        serde_json::to_string(&obj).unwrap_or_else(|_| format!("{{\"msg\":\"{}\",\"code\":1}}", self.msg))
-    }
-}
-
-impl Display for VerificationError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.msg)
-    }
-}
-
-impl From<std::io::Error> for VerificationError {
-    fn from(value: Error) -> Self {
-        VerificationError {
-            cert: None,
-            msg: value.to_string(),
-        }
-    }
-}
-
-impl From<ZipError> for VerificationError {
-    fn from(value: ZipError) -> Self {
-        VerificationError {
-            cert: None,
-            msg: value.to_string(),
-        }
-    }
-}
-
-impl From<anyhow::Error> for VerificationError {
-    fn from(value: anyhow::Error) -> Self {
-        VerificationError {
-            cert: None,
-            msg: value.to_string(),
-        }
-    }
-}
-
-impl From<ErrorStack> for VerificationError {
-    fn from(value: ErrorStack) -> Self {
-        VerificationError {
-            cert: None,
-            msg: value.to_string(),
-        }
+        serde_json::to_string(&obj).unwrap_or_else(|_| "{\"code\":-1,\"msg\":\"launch failed\"}".to_string())
     }
 }
 
