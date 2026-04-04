@@ -26,10 +26,18 @@ use crate::errors::VerificationError;
 use crate::verify::verify_jar;
 
 #[derive(Debug)]
+struct JnlpInfo {
+    title: Option<String>,
+    icon_href: Option<String>,
+}
+
+#[derive(Debug)]
 #[allow(dead_code)]
 pub struct WebstartFile {
     url: String,
     main_class: String,
+    title: Option<String>,
+    icon_path: Option<PathBuf>,
     args: Vec<String>,
     j2ses: Option<Vec<J2se>>,
     jar_dir: PathBuf,
@@ -82,7 +90,7 @@ impl WebstartFile {
             .danger_accept_invalid_certs(true);
         let client = cb.build()?;
 
-        let r = client.get(&webstart).send()?;
+        let r = client.get(&webstart).send()?.error_for_status()?;
         let data = r.text()?;
         let doc = roxmltree::Document::parse(&data)?;
 
@@ -95,6 +103,7 @@ impl WebstartFile {
             .ok_or(Error::msg("missing main-class attribute"))?
             .to_string();
         let args = get_client_args(&main_class_node);
+        let jnlp_info = get_jnlp_info(&root);
 
         let resources_node = get_node(&root, "resources");
 
@@ -131,10 +140,20 @@ impl WebstartFile {
             download_jars(&resources_node, &client, dir_path, &base_url, on_progress)?;
         }
 
+        let icon_path = download_icon(
+            &client,
+            dir_path,
+            &base_url,
+            jnlp_info.icon_href.as_deref(),
+            on_progress,
+        )?;
+
         let loaded_at = SystemTime::now();
         let ws = WebstartFile {
             url: base_url.to_string(),
             main_class,
+            title: jnlp_info.title,
+            icon_path,
             jar_dir,
             args,
             loaded_at,
@@ -216,6 +235,16 @@ impl WebstartFile {
         if let Some(args) = ce.java_args.as_deref() {
             // Should probably do some sanitization here...
             cmd.args(args.trim().lines());
+        }
+
+        #[cfg(target_os = "macos")]
+        {
+            if let Some(icon_path) = self.icon_path.as_ref().and_then(|path| path.to_str()) {
+                cmd.arg(format!("-Xdock:icon={}", icon_path));
+            }
+
+            let dock_name = self.title.as_deref().unwrap_or("Ballista");
+            cmd.arg(format!("-Xdock:name={}", dock_name));
         }
 
         cmd.arg("-cp")
@@ -346,7 +375,7 @@ fn download_jars(
             None => continue,
         };
         let hash_in_jnlp = n.attribute("sha256");
-        let url = format!("{}/{}", base_url, href);
+        let url = resolve_resource_url(base_url, href)?;
 
         if jar {
             let file_name = get_file_name_from_path(href);
@@ -359,12 +388,12 @@ fn download_jars(
                 let _ = on_progress.send(serde_json::json!({
                     "message": format!("Downloading {} ({})", file_name, counter),
                 }));
-                let mut resp = client.get(url).send()?;
+                let mut resp = client.get(url).send()?.error_for_status()?;
                 let mut f = File::create(&jar_file_path)?;
                 resp.copy_to(&mut f)?;
             }
         } else if extension {
-            let r = client.get(url).send()?;
+            let r = client.get(url).send()?.error_for_status()?;
             let data = r.text()?;
             let doc = roxmltree::Document::parse(&data)?;
             let root = doc.root();
@@ -377,6 +406,34 @@ fn download_jars(
     }
 
     Ok(())
+}
+
+fn download_icon(
+    client: &Client,
+    dir_path: &Path,
+    base_url: &str,
+    icon_href: Option<&str>,
+    on_progress: &Channel<serde_json::Value>,
+) -> Result<Option<PathBuf>, Error> {
+    let Some(icon_href) = icon_href else {
+        return Ok(None);
+    };
+
+    let file_name = get_file_name_from_path(icon_href);
+    let local_path = dir_path.join(format!("jnlp-icon-{}", file_name));
+
+    if local_path.exists() {
+        return Ok(Some(local_path));
+    }
+
+    let icon_url = resolve_resource_url(base_url, icon_href)?;
+    let _ = on_progress.send(serde_json::json!({
+        "message": format!("Downloading {}", file_name),
+    }));
+    let mut resp = client.get(icon_url).send()?.error_for_status()?;
+    let mut file = File::create(&local_path)?;
+    resp.copy_to(&mut file)?;
+    Ok(Some(local_path))
 }
 
 /// Filter JNLP java-vm-args to block flags that could execute arbitrary code.
@@ -421,6 +478,42 @@ fn get_client_args(root: &Node) -> Vec<String> {
     args
 }
 
+fn get_jnlp_info(root: &Node) -> JnlpInfo {
+    let information = match get_node(root, "information") {
+        Some(node) => node,
+        None => {
+            return JnlpInfo {
+                title: None,
+                icon_href: None,
+            };
+        }
+    };
+
+    let title = information
+        .children()
+        .find(|node| node.has_tag_name("title"))
+        .and_then(|node| node.text())
+        .map(str::trim)
+        .filter(|text| !text.is_empty())
+        .map(ToOwned::to_owned);
+
+    let icon_href = information
+        .children()
+        .filter(|node| node.has_tag_name("icon"))
+        .find(|node| node.attribute("kind") != Some("splash"))
+        .and_then(|node| node.attribute("href"))
+        .map(ToOwned::to_owned)
+        .or_else(|| {
+            information
+                .children()
+                .find(|node| node.has_tag_name("icon"))
+                .and_then(|node| node.attribute("href"))
+                .map(ToOwned::to_owned)
+        });
+
+    JnlpInfo { title, icon_href }
+}
+
 fn get_j2ses(resources: &Node) -> Option<Vec<J2se>> {
     let mut j2ses = Vec::new();
     for n in resources.descendants() {
@@ -451,6 +544,15 @@ fn get_node<'a>(root: &'a Node, tag_name: &str) -> Option<Node<'a, 'a>> {
         }
         return false;
     })
+}
+
+fn resolve_resource_url(base_url: &str, href: &str) -> Result<Url, Error> {
+    if let Ok(url) = Url::parse(href) {
+        return Ok(url);
+    }
+
+    let base = Url::parse(&format!("{}/", base_url.trim_end_matches('/')))?;
+    Ok(base.join(href)?)
 }
 
 fn normalize_url(u: &str) -> Result<(String, String), Error> {
@@ -501,7 +603,9 @@ fn has_file_changed(jar_file_path: &Path, hash_in_jnlp: Option<&str>) -> Result<
 }
 #[cfg(test)]
 mod tests {
-    use crate::webstart::normalize_url;
+    use roxmltree::Document;
+
+    use crate::webstart::{get_jnlp_info, normalize_url};
     use anyhow::Error;
 
     #[test]
@@ -520,6 +624,25 @@ mod tests {
             let (reconstructed_url, _host) = normalize_url(src)?;
             assert_eq!(expected, &reconstructed_url);
         }
+        Ok(())
+    }
+
+    #[test]
+    fn test_get_jnlp_info_prefers_non_splash_icon() -> Result<(), Error> {
+        let xml = r#"
+            <jnlp>
+                <information>
+                    <title>Example Administrator</title>
+                    <icon href="images/app-icon.png"/>
+                    <icon href="images/splash.png" kind="splash"/>
+                </information>
+            </jnlp>
+        "#;
+        let doc = Document::parse(xml)?;
+        let info = get_jnlp_info(&doc.root());
+
+        assert_eq!(info.title.as_deref(), Some("Example Administrator"));
+        assert_eq!(info.icon_href.as_deref(), Some("images/app-icon.png"));
         Ok(())
     }
 }
