@@ -24,10 +24,6 @@
   "plugins": {},
   "app": {
     "withGlobalTauri": false,
-    "trayIcon": {
-      "iconPath": "icons/icon.png",
-      "title": "Ballista"
-    },
     "security": {
       "csp": null
     },
