@@ -14,7 +14,7 @@ edition = "2021"
 tauri-build = { version = "2.5.5", features = [] }
 
 [dependencies]
-tauri = { version = "2.10.2", features = ["tray-icon"] }
+tauri = { version = "2.10.2", features = [] }
 tauri-runtime-wry = "2.10.0"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
