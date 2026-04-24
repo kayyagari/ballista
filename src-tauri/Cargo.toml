@@ -28,7 +28,7 @@ uuid = {version = "1.21.0", features = ["v4", "fast-rng"] }
 home = "0.5.12"
 zip = {version = "2.4.2", features = ["deflate"] }
 rustc-hash = "2.1.1"
-openssl = { version = "0.10.75", features = ["vendored"] }
+openssl = { version = "0.10.78", features = ["vendored"] }
 openssl-probe = "0.1.6"
 asn1-rs = "0.7.1"
 tauri-plugin-shell = "2.3.5"
