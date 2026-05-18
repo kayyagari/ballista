@@ -12,9 +12,6 @@ use std::sync::{Arc, Mutex};
 use std::time::SystemTime;
 
 use anyhow::Error;
-use openssl::x509::store::X509StoreRef;
-use openssl::x509::X509;
-use reqwest::blocking::{Client, ClientBuilder};
 use reqwest::Url;
 use roxmltree::Node;
 use rustc_hash::FxHashMap;
@@ -22,8 +19,7 @@ use sha2::{Digest, Sha256};
 use tauri::ipc::Channel;
 
 use crate::connection::ConnectionEntry;
-use crate::errors::VerificationError;
-use crate::verify::verify_jar;
+use crate::pinned_downloader::{download_to_file, download_to_string};
 
 #[derive(Debug)]
 #[allow(dead_code)]
@@ -70,20 +66,11 @@ impl WebStartCache {
 }
 
 impl WebstartFile {
-    pub fn load(base_url: &str, cache_dir: &PathBuf, donotcache: bool, conn_id: &str, conn_name: &str, on_progress: &Channel<serde_json::Value>) -> Result<WebstartFile, Error> {
+    pub fn load(base_url: &str, cache_dir: &PathBuf, donotcache: bool, conn_id: &str, conn_name: &str, expected_certificate: Option<&[u8]>, on_progress: &Channel<serde_json::Value>) -> Result<WebstartFile, Error> {
         let (base_url, _host) = normalize_url(base_url)?;
         let webstart = format!("{}/webstart.jnlp", base_url); // base_url will never contain a / at the end after normalization
         let _ = on_progress.send(serde_json::json!({"message": "Fetching server configuration..."}));
-        let cb = ClientBuilder::default()
-            // in certain network environments client is failing with error message "connection closed before message completed"
-            // disabling the pooling resolved the issue
-            .pool_max_idle_per_host(0)
-            // accept any cert presented by the MC server
-            .danger_accept_invalid_certs(true);
-        let client = cb.build()?;
-
-        let r = client.get(&webstart).send()?;
-        let data = r.text()?;
+        let data = download_to_string(&webstart, expected_certificate).map_err(Error::new)?;
         let doc = roxmltree::Document::parse(&data)?;
 
         let root = doc.root();
@@ -128,7 +115,7 @@ impl WebstartFile {
         let mut j2ses = None;
         if let Some(resources_node) = resources_node {
             j2ses = get_j2ses(&resources_node);
-            download_jars(&resources_node, &client, dir_path, &base_url, on_progress)?;
+            download_jars(&resources_node, dir_path, &base_url, expected_certificate, on_progress)?;
         }
 
         let loaded_at = SystemTime::now();
@@ -292,44 +279,13 @@ impl WebstartFile {
 
         Ok(())
     }
-
-    pub fn verify(&self, cert_store: &X509StoreRef, trusted_certs: &[X509]) -> Result<(), VerificationError> {
-        let mut jar_files = Vec::with_capacity(128);
-        let itr = self
-            .jar_dir
-            .read_dir()
-            .map_err(|e| VerificationError {
-                cert: None,
-                msg: format!("failed to read jar files directory: {}", e),
-            })?;
-        for e in itr {
-            let e = e.map_err(|e| VerificationError {
-                cert: None,
-                msg: format!("failed to list directory entry: {}", e),
-            })?;
-            let file_path = e.path();
-            jar_files.push(file_path);
-        }
-
-        jar_files.sort_unstable();
-        println!("{:?}", jar_files);
-
-        for jf in jar_files {
-            let file_path = jf.to_str().ok_or_else(|| VerificationError {
-                cert: None,
-                msg: format!("jar file path is not valid UTF-8: {:?}", jf),
-            })?;
-            verify_jar(file_path, cert_store, trusted_certs)?;
-        }
-        Ok(())
-    }
 }
 
 fn download_jars(
     resources_node: &Node,
-    client: &Client,
     dir_path: &Path,
     base_url: &str,
+    expected_certificate: Option<&[u8]>,
     on_progress: &Channel<serde_json::Value>,
 ) -> Result<(), Error> {
     let mut counter = 0usize;
@@ -359,19 +315,16 @@ fn download_jars(
                 let _ = on_progress.send(serde_json::json!({
                     "message": format!("Downloading {} ({})", file_name, counter),
                 }));
-                let mut resp = client.get(url).send()?;
-                let mut f = File::create(&jar_file_path)?;
-                resp.copy_to(&mut f)?;
+                download_to_file(&url, expected_certificate, &jar_file_path).map_err(Error::new)?;
             }
         } else if extension {
-            let r = client.get(url).send()?;
-            let data = r.text()?;
+            let data = download_to_string(&url, expected_certificate).map_err(Error::new)?;
             let doc = roxmltree::Document::parse(&data)?;
             let root = doc.root();
             let resources_node = get_node(&root, "resources");
             let ext_base_url = format!("{}/webstart/extensions", base_url);
             if let Some(resources_node) = resources_node {
-                download_jars(&resources_node, client, dir_path, &ext_base_url, on_progress)?;
+                download_jars(&resources_node, dir_path, &ext_base_url, expected_certificate, on_progress)?;
             }
         }
     }

@@ -15,11 +15,13 @@ use tauri::ipc::Channel;
 use tauri::{AppHandle, Manager, State};
 
 use crate::connection::{ConnectionEntry, ConnectionStore};
+use crate::errors::{LaunchError, PeerDetails};
+use crate::pinned_downloader::PinnedDownloadError;
 use crate::webstart::{WebStartCache, WebstartFile};
 
 mod connection;
 mod errors;
-mod verify;
+mod pinned_downloader;
 mod webstart;
 
 const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -39,12 +41,14 @@ async fn launch(id: String, on_progress: Channel<serde_json::Value>, app: AppHan
     let ce = cs.get(&id)
         .ok_or_else(|| format!("connection not found: {}", id))?;
     let cache_dir = cs.cache_dir.clone();
-    let cert_store = cs.get_cert_store();
     let address = ce.address.clone();
     let conn_id = ce.id.clone();
     let conn_name = ce.name.clone();
     let donotcache = ce.donotcache;
-    let verify = ce.verify;
+    let expected_certificate = ce
+        .peer_certificate
+        .as_deref()
+        .and_then(|peer_certificate| openssl::base64::decode_block(peer_certificate).ok());
 
     let mut ws = wc.get(&address);
     if ws.is_none() {
@@ -52,11 +56,18 @@ async fn launch(id: String, on_progress: Channel<serde_json::Value>, app: AppHan
             let on_progress = on_progress.clone();
             let address = address.clone();
             let cache_dir = cache_dir.clone();
-            move || WebstartFile::load(&address, &cache_dir, donotcache, &conn_id, &conn_name, &on_progress)
+            let expected_certificate = expected_certificate.clone();
+            move || WebstartFile::load(&address, &cache_dir, donotcache, &conn_id, &conn_name, expected_certificate.as_deref(), &on_progress)
         }).await.map_err(|e| e.to_string())?;
 
         match tmp {
             Err(e) => {
+                if let Some(download_error) = e.downcast_ref::<PinnedDownloadError>() {
+                    let response = create_pinned_download_response(download_error, expected_certificate.as_deref());
+                    println!("{}", response);
+                    return Ok(response);
+                }
+
                 let msg = e.to_string();
                 println!("{}", msg);
                 return Ok(create_json_resp(-1, &msg));
@@ -67,16 +78,6 @@ async fn launch(id: String, on_progress: Channel<serde_json::Value>, app: AppHan
         }
     }
     let ws = ws.expect("WebstartFile should be loaded at this point");
-    if verify {
-        let _ = on_progress.send(serde_json::json!({"message": "Verifying jar signatures..."}));
-        let trusted_certs = cs.get_trusted_certs();
-        let verification_status = ws.verify(cert_store.as_ref(), &trusted_certs);
-        if let Err(e) = verification_status {
-            let resp = e.to_json();
-            println!("{}", resp);
-            return Ok(resp);
-        }
-    }
     let _ = on_progress.send(serde_json::json!({"message": "Launching administrator..."}));
     let console_jar = if ce.show_console {
         Some(app.path().resource_dir()
@@ -95,6 +96,29 @@ async fn launch(id: String, on_progress: Channel<serde_json::Value>, app: AppHan
 
     let _ = cs.update_last_connected(&id);
     Ok(String::from("{\"code\": 0}"))
+}
+
+fn create_pinned_download_response(error: &PinnedDownloadError, expected_certificate: Option<&[u8]>) -> String {
+    match error {
+        PinnedDownloadError::PeerCertificate { peer_cert_der } => match PeerDetails::from_der(peer_cert_der) {
+            Ok(peer) => {
+                if let Some(expected_certificate) = expected_certificate {
+                    let expected_fingerprint = PeerDetails::from_der(expected_certificate)
+                        .map(|expected_peer| expected_peer.sha256sum)
+                        .unwrap_or_else(|_| "unknown".to_string());
+                    LaunchError::FingerprintMismatch {
+                        peer,
+                        expected_fingerprint,
+                    }
+                    .to_json()
+                } else {
+                    LaunchError::UntrustedPeer { peer }.to_json()
+                }
+            }
+            Err(parse_error) => create_json_resp(-1, &format!("failed to parse peer certificate: {}", parse_error)),
+        },
+        PinnedDownloadError::Other(message) => create_json_resp(-1, message),
+    }
 }
 
 #[tauri::command]
@@ -140,8 +164,8 @@ fn import(file_path: &str, overwrite: bool, cs: State<ConnectionStore>) -> Resul
 }
 
 #[tauri::command(rename_all = "snake_case")]
-fn trust_cert(cert: &str, cs: State<ConnectionStore>) -> Result<String, String> {
-    cs.add_trusted_cert(cert).map_err(|e| e.to_string())?;
+fn trust_cert(connection_id: &str, peer_certificate: &str, cs: State<ConnectionStore>) -> Result<String, String> {
+    cs.add_trusted_cert(connection_id, peer_certificate).map_err(|e| e.to_string())?;
     Ok(String::from("success"))
 }
 
@@ -157,10 +181,6 @@ fn main() {
     let r = fs::create_dir(&legacy_ballista_dir);
     if let Ok(_) = r {
         move_file(home_directory.join("catapult-data.json"), legacy_ballista_dir.join("ballista-data.json"));
-        move_file(
-            home_directory.join("catapult-trusted-certs.json"),
-            legacy_ballista_dir.join("ballista-trusted-certs.json"),
-        );
     }
 
     // >= 2.1.0 migrate from .ballista to .launcher

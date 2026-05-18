@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Connection } from "~/types"
+import type { Connection, LaunchResponse } from "~/types"
 import { LandingScreenServerStatus } from "~/enums"
 import { Channel, invoke } from "@tauri-apps/api/core"
 import { fetch as tauriFetch } from "@tauri-apps/plugin-http"
@@ -107,21 +107,40 @@ const launchServer = async (connection: Connection) => {
   }
 
   try {
-    // Loop to handle multiple untrusted certs across different jars
+    // Loop to handle untrusted certs
     while (true) {
       const response: string = await invoke("launch", {
         id: connection.id,
         on_progress: onProgress,
       })
-      const result = JSON.parse(response)
+      const result = JSON.parse(response) as LaunchResponse
 
-      // Result code 1 means cert needs trust approval
-      if (result.code !== 1) return
+      if (result.code === 0) return
 
-      const shouldTrustCertificate = await trustCertificate(result.cert)
-      if (!shouldTrustCertificate) return
+      if (result.code === 1 && result.peer) {
+        const shouldTrustPeer = await trustCertificate(result.peer)
+        if (!shouldTrustPeer) return
 
-      await invoke("trust_cert", { cert: result.cert.der })
+        await invoke("trust_cert", {
+          connection_id: connection.id,
+          peer_certificate: result.peer.der,
+        })
+        connection.peerCertificate = result.peer.der
+        continue
+      }
+
+      if (result.code === 2 && result.peer) {
+        launchError.value = [
+          result.msg || "Server fingerprint mismatch.",
+          `Pinned: ${result.expected_fingerprint || "unknown"}`,
+          `Observed: ${result.peer.sha256sum}`,
+          "Clear the stored fingerprint in the connection settings to trust a new peer.",
+        ].join("\n")
+        return
+      }
+
+      launchError.value = result.msg || "Launch failed."
+      return
     }
   } catch (e) {
     launchError.value = `Launch failed: ${e}`

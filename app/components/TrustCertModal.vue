@@ -26,14 +26,14 @@ const emit = defineEmits(["confirm", "cancel"])
           @click="emit('cancel')"
         />
 
-        <div class="relative bg-surface-1 rounded-xl shadow-overlay w-full max-w-md mx-4 p-6 space-y-5">
+        <div class="relative bg-surface-1 rounded-xl shadow-overlay w-full max-w-xl mx-4 p-6 space-y-5">
           <div class="flex items-start gap-3">
             <div class="flex-none flex items-center justify-center size-10 rounded-full bg-amber-900/30">
               <icon name="ph:shield-warning" class="text-xl text-amber-400" />
             </div>
             <div>
               <h2 class="font-semibold text-text-primary">Untrusted Certificate</h2>
-              <p class="text-sm text-text-tertiary mt-0.5">Review the certificate details before proceeding.</p>
+              <p class="text-sm text-text-tertiary mt-0.5">Do you want to download and run software from this server?</p>
             </div>
           </div>
 
